@@ -58,8 +58,8 @@ netflow = DataFrame(CSV.File(netflow_path));
 netflow_2d = [cfs_to_m3s(row["powell_inflow (cfs)"]) for row in eachrow(netflow)];
 
 # Read in solar radiation capacity
-alpha_raw = DataFrame(CSV.File(solarrad_path));
-alpha_2d = [row[month] for row in eachrow(alpha_raw)];
+alpha = DataFrame(CSV.File(solarrad_path));
+alpha_2d = [row[month] for row in eachrow(alpha)];
 min_val = minimum(alpha_2d);
 max_val = maximum(alpha_2d);
 alpha_norm = (alpha_2d .- min_val) / (max_val - min_val); # Normalize data 
@@ -86,24 +86,24 @@ hpcap = DataFrame(CSV.File(hpcap_path)).Column1;
 # Therefore, will let the simulation run every hour of the week before resetting for the next water contract 
 
 T = 24; # time step per day
-N_sim = 1; # days per week
+N_sim = 7; # days per week
 W_sim = 1; # number of weeks 
-s2hr = 3600  # seconds in an hour (delta T)
+s2hr = 3600  # seconds in an hour 
 
 # Extract data for time period of interest
 L = RTP_2d[1:T*N_sim,1];    # hourly LMP [$/MWh]
 Q = netflow_2d[1:N_sim,1];  # daily system net flow into [m3]
 U = release_2d[1:N_sim,1]   # daily total release contract [m3]
-S = storage_2d[1:N_sim,1]   # historical daily storage levels [m3]
+V = storage_2d[1:N_sim,1]   # historical daily storage levels [m3]
 q = dailyflow_to_hourly(Q, T); # hourly system net flow (constant over each day) [m3]
 alpha_norm_w = repeat(alpha_norm, N_sim) # replicate available solar capacity for every day of the sim. 
-alpha = alpha_norm_w[1:T*N_sim]
 
-V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
+S0 = V[1]   # initial reservoir conditions [~1.9 e10 m3]
 e = 0    # evaporation constant [m/day]
+
 min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-min_Vt = S0 - T*N_sim*s2hr*max_ut # min reservoir levels
+min_St = S0 - T*N_sim*s2hr*max_ut # min reservoir levels
 RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
 PF = 3300   # max feeder capacity [MW] (3.3 GW) 
@@ -115,45 +115,66 @@ g = 9.8      # acceleration due to gravity [m/s^2]
 
 Uw = sum(U[1:N_sim]); # Weekly Water contract
 
+
 # ------------ HYDRAULIC HEAD VARS ------------ #
 a = 15;
 b = 0.13; 
 
 # ----------------- OPTIMIZATION  ----------------- #
 
-# Create the optimization model
-model = Model(Ipopt.Optimizer)
+# initialize optimization model
+model = Model(Ipopt.Optimizer)  
+set_attribute(model, "max_cpu_time", 60.0)
+set_attribute(model, "print_level", 0)
 
-# Define variables
-@variable(model, V[1:T])
-set_lower_bound.(V, min_Vt)
-@variable(model, p_h[1:T] >= 0)
-@variable(model, p_s[1:T] >= 0)
-@variable(model, u[1:T])
+@variable(model, 0 <= ph[1:T*N_sim])      # total hydro discharge power [Mw]
+@variable(model, 0 <= ps[1:T*N_sim])      # total solar discharge power [MW]
+@variable(model, S[1:T*N_sim])            # hourly storage level [m3]
+set_lower_bound.(S, min_St)
+@variable(model, u[1:T*N_sim])  # water release [m3/s]
 set_upper_bound.(u, max_ut)
 set_lower_bound.(u, min_ut)
 
-# Initial condition for V
-@constraint(model, V[1] == V0)
+# @objective(model, Max, sum(L.*(ph + ps)))
+@objective(model, Max, sum(u))
 
-# Objective function
-@objective(model, Max, sum(L .* (p_h + p_s)))
+# (1a) initial reservoir mass balance equation
+@constraint(model, MassBalInit, S[1] == S0 + s2hr*(q[1] - u[1])) 
+# (1b) reservoir mass balance equation
+@constraint(model, MassBal[t = 2:T*N_sim], S[t] == S[t-1] + s2hr*(q[t] - u[t])) 
+# (2) min max flow rate
+# @constraint(model, Release[t=1:T*N_sim], min_ut <= u[t] <= max_ut)
+# (3) max solar capacity 
+# @constraint(model, SolarMax[t=1:T*N_sim], ps[t] <= alpha_norm_w[t]*PS )
+# (4) max feeder capacity 
+# @constraint(model, FeederMax[t=1:T*N_sim], ps[t] + ph[t] <= PF )
+# (5a) initial ramp rate constraint 
+# @constraint(model, RampRateInit, RR_dn <= u[1] <= RR_up)
+# (5b) ramp rate constraint 
+# @constraint(model, RampRate[t=2:T*N_sim], RR_dn <= u[t] - u[t-1] <= RR_up)
+# (6) daily water release contract
+# @constraint(model, Water_Contract, s2hr*sum(u) == Uw) # check to see if this constraint is ever binding via dual variable 
+# (7) release to energy conversion 
+# @constraint(model, ReleaseEnergy[t=1:T*N_sim], ph[t] <= (eta*rho_w*g*u[t]*(a*(S[t]^b)))/(1e6))
 
-# Constraints
-@constraint(model, [t in 2:T], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-@constraint(model, s2hr*sum(u) == Uw)
-@constraint(model, [t in 1:T], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
-@constraint(model, [t in 1:T], min_ut <= u[t] <= max_ut)
-@constraint(model, [t in 2:T], RR_dn <= u[t] - u[t-1] <= RR_up)
-@constraint(model, [t in 1:T], 0 <= p_s[t] <= alpha[t]*PS)
-@constraint(model, [t in 1:T], 0 <= p_s[t] + p_h[t] <= PF)
+@printf("Optimization starts...\n")
 
-# Solve the optimization problem
 optimize!(model)
 
-# Print the results
-println("Optimal V: ", value.(V))
-println("Optimal p_h: ", value.(p_h))
-println("Optimal p_s: ", value.(p_s))
-println("Optimal u: ", value.(u))
-println("Optimal objective value: ", objective_value(model))
+status = termination_status(model)
+
+if (status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || status == MOI.TIME_LIMIT) && has_values(model)
+    if (status == MOI.OPTIMAL)
+        println("** Problem solved correctly **")
+    else
+        println("** Problem returned a locally optimal solution **")
+    end
+    println(status)
+    println("- Objective value : ", objective_value(model))
+    # println("- Optimal solutions:")
+    # println("hydro: $(value.(ph))")
+    # println("solar: $(value.(ps))")
+else
+    println("The model was not solved correctly.")
+    println(status)
+end

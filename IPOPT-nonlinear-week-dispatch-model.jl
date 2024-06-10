@@ -133,7 +133,7 @@ set_lower_bound.(V, min_Vt)
 set_upper_bound.(u, max_ut)
 set_lower_bound.(u, min_ut)
 
-# Initial condition for V
+# Initial conditions
 @constraint(model, V[1] == V0)
 
 # Objective function

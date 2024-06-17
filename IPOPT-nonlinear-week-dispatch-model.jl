@@ -132,12 +132,15 @@ set_lower_bound.(u, min_ut)
 # Initial conditions
 @constraint(model, MassBalInit, V[1] == V0)
 
+# End conditions
+# @constraint(model, WaterContract, V[T*N] >= V0 - Uw + sum(q))
+
 # Objective function
 @objective(model, Max, sum(L .* (p_h + p_s)))
 
 # Constraints
 @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-@constraint(model, WaterContract, s2hr*sum(u) >= Uw)
+@constraint(model, WaterContract, s2hr*sum(u) == Uw)
 @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
 @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
@@ -172,8 +175,9 @@ gen_plots(path, T*N, value.(p_s), PS, alpha_norm_w, value.(p_h), hpcap, PF)
 # Water release
 release_plots(path, T*N, value.(u), min_ut, max_ut)
 
-# Water release overlaid with electicity price
+# Water release/generation overlaid with electicity price
 release_plots_LMP(path, T*N, value.(u), min_ut, max_ut, L)
+gen_plots_LMP(path, T*N, value.(p_s) + value.(p_h), PF, L)
 
 #println("Optimal V: ", value.(V))
 #println("Optimal p_h: ", value.(p_h))

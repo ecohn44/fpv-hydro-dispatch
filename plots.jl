@@ -52,7 +52,7 @@ function release_plots(path, T, u, min, max)
     savefig(plot1,  path * "/release.png");
 end
 
-function release_plots_LMP(path, T, u, min, max, LMP)
+function release_plots_LMP(path, T, u, min, max, L)
     plot(1:T, u, xlabel="Hour", ylabel="Release (m3)", label="Water Release", lw=2,legend = :outertopright,title="Hourly Water Release vs Local Marginal Price",titlefont=font(12))
     # Add maximum th 
     hline!([max], color=:red, linestyle=:dash, label="Max Release Rate")
@@ -61,6 +61,15 @@ function release_plots_LMP(path, T, u, min, max, LMP)
     # Add LMP with different yaxis
     plot!(twinx(), 1:T, L, ylabel="\$/MWh", label="Hourly Marginal Price", color=:green,legend = :outerbottomright)
     savefig(path * "/LMPrelease.png");
+end
+
+function gen_plots_LMP(path, T, p, max, L)
+    plot(1:T, p, xlabel="Hour", ylabel="Total Generation (MWh)", label="Power Generation", lw=2,legend = :outertopright,title="Total System Generation vs Local Marginal Price",titlefont=font(12))
+    # Add maximum th 
+    hline!([max], color=:red, linestyle=:dash, label="Feeder Capacity")
+    # Add LMP with different yaxis
+    plot!(twinx(), 1:T, L, ylabel="\$/MWh", label="Hourly Marginal Price", color=:green,legend = :outerbottomright)
+    savefig(path * "/LMPgeneration.png");
 end
     
 function flow_plot(path, T, Q)

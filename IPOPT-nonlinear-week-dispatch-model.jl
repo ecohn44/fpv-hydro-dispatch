@@ -102,7 +102,7 @@ max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s]
 min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels
 RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-PF = 3300   # max feeder capacity [MW] (3.3 GW) 
+PF = 1500   # max feeder capacity [MW] (3.3 GW) 
 PS = 1000   # max solar field capacity [MW] (1 GW) 
 SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
 eta = .9     # efficiency of release-energy conversion
@@ -133,7 +133,7 @@ set_lower_bound.(u, min_ut)
 @constraint(model, MassBalInit, V[1] == V0)
 
 # End conditions
-# @constraint(model, WaterContract, V[T*N] >= V0 - Uw + sum(q))
+# @constraint(model, WaterContract, V[T*N] >= V0 - Uw + delta_t*sum(q))
 
 # Objective function
 @objective(model, Max, sum(L .* (p_h + p_s)))
@@ -179,18 +179,11 @@ release_plots(path, T*N, value.(u), min_ut, max_ut)
 release_plots_LMP(path, T*N, value.(u), min_ut, max_ut, L)
 gen_plots_LMP(path, T*N, value.(p_s) + value.(p_h), PF, L)
 
-#println("Optimal V: ", value.(V))
-#println("Optimal p_h: ", value.(p_h))
-#println("Optimal p_s: ", value.(p_s))
-#println("Optimal u: ", value.(u))
-
 # ---------- DUAL VALUES -------- # 
 println("Dual Values")
 println("Water Contract: ", dual.(WaterContract))
 
-#println("Mass Balance: ", dual.(MassBal))
-#println("Release Energy: ", dual.(ReleaseEnergy))
-#println("Water Release: ", dual.(Release))
-#println("Ramp Rate: ", dual.(RampRate))
-#println("Solar Capacity: ", dual.(SolarCap))
-#println("Feeder Capacity: ", dual.(FeederCap))
+#println("Optimal V: ", value.(V))
+#println("Optimal p_h: ", value.(p_h))
+#println("Optimal p_s: ", value.(p_s))
+#println("Optimal u: ", value.(u))

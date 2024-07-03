@@ -102,7 +102,7 @@ max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s]
 min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels
 RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-PF = 1500   # max feeder capacity [MW] (3.3 GW) 
+PF = 1200   # max feeder capacity [MW] (3.3 GW) 
 PS = 1000   # max solar field capacity [MW] (1 GW) 
 SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
 eta = .9     # efficiency of release-energy conversion
@@ -119,6 +119,7 @@ b = 0.13;
 
 # Create the optimization model
 model = Model(Ipopt.Optimizer)
+# model = Model(Gurobi.Optimizer)
 
 # Define variables
 @variable(model, V[1:T*N])
@@ -131,16 +132,17 @@ set_lower_bound.(u, min_ut)
 
 # Initial conditions
 @constraint(model, MassBalInit, V[1] == V0)
+@constraint(model, RampRateInit, u[1] == min_ut)
 
 # End conditions
-# @constraint(model, WaterContract, V[T*N] >= V0 - Uw + delta_t*sum(q))
+@constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
 
 # Objective function
 @objective(model, Max, sum(L .* (p_h + p_s)))
 
 # Constraints
 @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-@constraint(model, WaterContract, s2hr*sum(u) == Uw)
+#@constraint(model, WaterContract, s2hr*sum(u) == Uw)
 @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
 @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)

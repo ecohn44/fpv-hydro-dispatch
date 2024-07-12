@@ -7,7 +7,7 @@ f = lambda x: x**2
 
 # Initialize variables
 x = np.zeros(T)
-lambda_ = 0.01 # intial lagrangian multiplier
+lambda_ = 0.1 # intial lagrangian multiplier
 alpha = 0.01 # learning rate
 
 # Lagrangian relaxation iterations
@@ -17,11 +17,11 @@ for iter in range(1000):
         x[t] = np.argmin(f(x[t]) + lambda_*x[t])
 
     # update lagrangian multiplier
-    constraint_violation = abs(np.sum(x) - U) # water contract constraint in equality formulation 
+    constraint_violation = np.sum(x) - U # water contract constraint in equality formulation 
     lambda_ = lambda_ + alpha*constraint_violation
 
     # check for convergence 
-    if constraint_violation < 1e-6:
+    if abs(constraint_violation) < 1e-6:
         break
 
 print("Optimal x: ", x)

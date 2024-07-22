@@ -110,6 +110,7 @@ rho_w = 1000 # density of water [kg/m^3]
 g = 9.8      # acceleration due to gravity [m/s^2]
 
 Uw = sum(U[1:N]); # Weekly Water contract
+VT = V0 + sum(q) - Uw # Terminal volume conditions
 
 # ------------ HYDRAULIC HEAD VARS ------------ #
 a = 15;
@@ -135,7 +136,7 @@ set_lower_bound.(u, min_ut)
 @constraint(model, RampRateInit, u[1] == min_ut)
 
 # End conditions
-@constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
+# @constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
 
 # Objective function
 @objective(model, Max, sum(L .* (p_h + p_s)))
@@ -143,6 +144,7 @@ set_lower_bound.(u, min_ut)
 # Constraints
 @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
 #@constraint(model, WaterContract, s2hr*sum(u) == Uw)
+@constraint(model, WaterContract, VT <= V0 + s2hr*(sum(q) - sum(u))) #(5b)
 @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
 @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)

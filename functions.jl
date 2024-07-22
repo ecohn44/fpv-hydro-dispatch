@@ -39,21 +39,22 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
     # Initial conditions
     @constraint(model, MassBalInit, V[1] == V0)
     @constraint(model, RampRateInit, u[1] == min_ut)
-
-    # End conditions
-    # @constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
-
+    
     # Objective function
     @objective(model, Max, sum(L .* (p_h + p_s)))
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
     @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
     @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
+
+    # Water Contract Variations
+    @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
+    # @constraint(model, WaterContract, VT <= V0 + s2hr*(sum(q) - sum(u)))
+    # @constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
 
     # Solve the optimization problem
     optimize!(model)
@@ -67,6 +68,10 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
 
     @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
     @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
+
+    # ---------- DUAL VALUES -------- # 
+    println("Dual Values")
+    println("Water Contract: ", dual.(WaterContract))
 end
 
 function load_data(year, month, T, N)

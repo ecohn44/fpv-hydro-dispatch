@@ -9,7 +9,7 @@ using Plots
 using Base.Filesystem
 using Ipopt
 include("plots.jl")
-include("DP-functions.jl")
+include("functions.jl")
 
 # ----------------- DATA LOAD / SIMULATION PARAMETERS ----------------- #
 

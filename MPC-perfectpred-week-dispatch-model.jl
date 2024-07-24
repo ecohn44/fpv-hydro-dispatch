@@ -46,9 +46,28 @@ b = 0.13;
 # Set moving horizon
 K = 4
 
+# Create storage for optimal control 
+u_star = [0.0 for n=1:T*N-1];
+p_s_star =  [0.0 for n=1:T*N-1];
+p_h_star = [0.0 for n=1:T*N-1];
+
 # Loop through total horizon, k is start index for reference 
-for k = 1:(T*N - K)
-    
+for k = 1:T*N-1
+
+    # update horizon for end of period edge cases
+    if k > T*N - K
+        Kh = T*N-k
+    else
+        Kh = K
+    end
+
+    # prev value assignment
+    if k == 1
+        u_prev = 0
+    else
+        u_prev = u_star[k-1]
+    end
+
     @printf("\n ///////////// Iteration: %d ///////////// \n" , k)
 
     # Determine day and index daily variables
@@ -57,15 +76,26 @@ for k = 1:(T*N - K)
     V0 = S[d]   # initial reservoir conditions [~1.9 e10 m3]
 
     # Index input vectors
-    L_h = L[k:k+K-1] # perfect prediction
-    q_h = q[k:k+K-1] # perfect prediction
-    alpha_h = alpha[k:k+K-1] #perfect prediction
+    L_h = L[k:k+Kh-1] # perfect prediction
+    q_h = q[k:k+Kh-1] # perfect prediction
+    alpha_h = alpha[k:k+Kh-1] #perfect prediction
 
     Uw = sum(U_h)/6; # Weekly Water contract --> 4hr contract
     VT = V0 + sum(q_h) - Uw # Terminal volume conditions
 
     # T = 1, N = K for limited subhorizon
-    run_sim(1, K, L_h, q_h, alpha_h, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+    u, p_s, p_h = run_sim(1, Kh, L_h, q_h, alpha_h, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
+
+    # Store control decision for t = 1
+    u_star[k] = u[1]
+    p_h_star[k] = p_h[1]
+    p_s_star[k] = p_s[1]
+
+    # testing 
+    #if k == 2
+    #    break
+    #end
+
 end
 
 

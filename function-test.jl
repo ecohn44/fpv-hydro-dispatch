@@ -8,7 +8,6 @@ using Dates
 using Plots
 using Base.Filesystem
 using Ipopt
-include("plots.jl")
 include("functions.jl")
 
 # ----------------- DATA LOAD / SIMULATION PARAMETERS ----------------- #
@@ -18,7 +17,7 @@ year = "2022";
 month = "January";
 
 T = 24; # time step per day
-N = 7; # days per week
+N = 1; # days per week
 s2hr = 3600  # seconds in an hour (delta t)
 
 L, U, S, q, alpha = load_data(year, month, T, N)
@@ -42,4 +41,15 @@ b = 0.13; #  HYDRAULIC HEAD VARS
 
 # ------------ RUN OPTIMIZATION ------------ #
 
-run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+# u, p_s, p_h = run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+
+for k = 1:T*N-1
+    
+    # update horizon for end of period edge cases
+    if k > T*N - K
+        Kh = T*N-k
+    else
+        Kh = K
+    end
+    @printf("k = %d; Kh = %d \n", k, Kh)
+end

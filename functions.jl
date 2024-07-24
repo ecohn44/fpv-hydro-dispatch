@@ -21,10 +21,11 @@ function dailyflow_to_hourly(q, T)
     return hourly_q
 end
 
-function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
 
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
+    set_silent(model) # no outputs
     # model = Model(Gurobi.Optimizer)
 
     # Define variables
@@ -38,7 +39,13 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
 
     # Initial conditions
     @constraint(model, MassBalInit, V[1] == V0)
-    @constraint(model, RampRateInit, u[1] == min_ut)
+    if k == 1
+        # first time step water release at min, handles ramp rate
+        @constraint(model, RampRateInit, u[1] == min_ut)
+    else
+        # else, enforce ramp rate with previous release
+        @constraint(model, RampRateInit, RR_dn <= u[1] - u_prev <= RR_up)
+    end
     
     # Objective function
     @objective(model, Max, sum(L .* (p_h + p_s)))
@@ -72,6 +79,10 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
     # ---------- DUAL VALUES -------- # 
     println("Dual Values")
     println("Water Contract: ", dual.(WaterContract))
+
+    # return optimial control vars
+    return value.(u), value.(p_s), value.(p_h)
+
 end
 
 function load_data(year, month, T, N)

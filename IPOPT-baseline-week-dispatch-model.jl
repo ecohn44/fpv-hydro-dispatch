@@ -192,9 +192,17 @@ println("Water Contract: ", dual.(WaterContract))
 theta = collect(dual.(MassBal))
 mu10 = collect(dual.(ReleaseEnergy))
 vol = value.(V)
-policy = zeros(Float64, T*N-1)
+policy = zeros(Float64, T*N)
 
 # Water Release DV Policy
 for i in 2:(T*N-1)
-    policy[i] = ((theta[i] - theta[i-1])/mu10[i])*(eta*g*rho_w*a*b*vol[i]^(b-1)/1e6)
+    policy[i] = ((theta[i] - theta[i-1])/mu10[i])*(eta*g*rho_w*a*b*vol[i]^(b-1))
 end
+
+overlay_policy_plot(path, T*N, policy, value.(u))
+
+overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
+
+
+
+

@@ -87,3 +87,19 @@ function LMP_plot(path, T, L)
     title!(plot1, "Hourly LMP")
     savefig(plot1,  path * "/LMP.png");
 end
+
+function overlay_policy_plot(path, T, u_pi, u_star)
+    # Plot water release from dual-value driven policy
+    plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Optimal and Lagrangian Water Release Simulations",titlefont=font(12))
+    # Add optimal water release with different yaxis
+    plot!(twinx(), 1:T, u_star, ylabel="Optimal Water Release (m3/s)", label="Optimal Policy", color=:green,legend = :outerbottomright)
+    savefig(path * "/policy_waterrelease.png");
+end
+
+function overlay_policy_plot_solar(path, T, u_pi, ps_star)
+    # Plot water release from dual-value driven policy
+    plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Lagrangian Water Release Overlayed Solar Simulations",titlefont=font(12))
+    # Add optimal water release with different yaxis
+    plot!(twinx(), 1:T, ps_star, ylabel="Optimal FPV Generation (MWh)", label="FPV Generation", color=:green,legend = :outerbottomright)
+    savefig(path * "/policy_waterrelease_solar.png");
+end

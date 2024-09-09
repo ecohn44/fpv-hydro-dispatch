@@ -91,12 +91,18 @@ function LMP_plot(path, T, L)
     savefig(plot1,  path * "/LMP.png");
 end
 
+function policy_plot(path, T, u_pi)
+    # Plot water release from dual-value driven policy
+    plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :topright,title="Lagrangian Water Release Simulations",titlefont=font(12))
+    savefig(path * "/policy_waterrelease.png");
+end
+
 function overlay_policy_plot(path, T, u_pi, u_star)
     # Plot water release from dual-value driven policy
     plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Optimal and Lagrangian Water Release Simulations",titlefont=font(12))
     # Add optimal water release with different yaxis
     plot!(twinx(), 1:T, u_star, ylabel="Optimal Water Release (m3/s)", label="Optimal Policy", color=:green, legend = :outerbottomright)
-    savefig(path * "/policy_waterrelease.png");
+    savefig(path * "/policy_waterrelease_overlay.png");
 end
 
 function overlay_policy_plot_solar(path, T, u_pi, ps_star)
@@ -120,17 +126,17 @@ end
 function hhead_plots(path, T, hh, hh_d)
     
     ## Plot 1: Hydraulic Head
-    plot1 = plot(1:T, hh, label="Hydraulic Head", lw=2, legend = :outertopright)
+    plot1 = plot(1:T, hh, label="Hydraulic Head", lw=2, legend = :topright)
     xlabel!(plot1, "Hour")
     ylabel!(plot1, "Hydraulic Head [m]")
-    title!(plot1, "Hydraulic Head over Time")
+    title!(plot1, "Available Hydraulic Head [m]")
     savefig(plot1, path * "/hh.png");
 
     ## Plot 2: Hydraulic Head Derivative
-    plot2 = plot(1:T, hh_d, label="Derivative of Hydraulic Head", lw=2, legend = :outertopright)
+    plot2 = plot(1:T, hh_d, label="Derivative of Hydraulic Head", lw=2, legend = :topright)
     xlabel!(plot2, "Hour")
     ylabel!(plot2, "Derivative of Hydraulic Head")
-    title!(plot2, "Derivative of Hydraulic Head over Time")
+    title!(plot2, "Derivative of Hydraulic Head")
     savefig(plot2, path * "/hh_d.png");
 
 end

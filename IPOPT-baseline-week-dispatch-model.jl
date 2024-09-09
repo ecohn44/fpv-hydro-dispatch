@@ -208,6 +208,7 @@ duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Mo
 duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
 
 # Plot Lagrangian policy
+policy_plot(path, T*N, policy)
 overlay_policy_plot(path, T*N, policy, value.(u))
 overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
 

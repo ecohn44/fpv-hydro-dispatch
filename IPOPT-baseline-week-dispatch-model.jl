@@ -8,6 +8,7 @@ using Dates
 using Plots
 using Base.Filesystem
 using Ipopt
+using LaTeXStrings
 include("plots.jl")
 
 # ----------------- UNIT CONVERSION ----------------- #
@@ -193,16 +194,23 @@ theta = collect(dual.(MassBal))
 mu10 = collect(dual.(ReleaseEnergy))
 vol = value.(V)
 policy = zeros(Float64, T*N)
+theta_diff = zeros(Float64, T*N-1)
 
 # Water Release DV Policy
 for i in 2:(T*N-1)
     policy[i] = ((theta[i] - theta[i-1])/mu10[i])*(eta*g*rho_w*a*b*vol[i]^(b-1))
+    theta_diff[i] = theta[i] - theta[i-1]
 end
 
-overlay_policy_plot(path, T*N, policy, value.(u))
+# Plot historically simulated dual values
+duals_plot(path, T*N-1, theta, L"\theta_t", "Mass Balance")
+duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Moving Difference")
+duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
 
+# Plot Lagrangian policy
+overlay_policy_plot(path, T*N, policy, value.(u))
 overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
 
-
-
-
+head = a * (value.(V).^b) # [m]
+head_deriv = a *b  * value.(V).^(b-1)
+hhead_plots(path, T*N, head, head_deriv)

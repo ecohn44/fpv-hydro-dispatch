@@ -1,3 +1,6 @@
+using LaTeXStrings
+using Plots
+
 function gen_plots(path, T, ps, PS, a, ph, PH, PF)
     
     ## Plot 1: Solar generation 
@@ -92,14 +95,42 @@ function overlay_policy_plot(path, T, u_pi, u_star)
     # Plot water release from dual-value driven policy
     plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Optimal and Lagrangian Water Release Simulations",titlefont=font(12))
     # Add optimal water release with different yaxis
-    plot!(twinx(), 1:T, u_star, ylabel="Optimal Water Release (m3/s)", label="Optimal Policy", color=:green,legend = :outerbottomright)
+    plot!(twinx(), 1:T, u_star, ylabel="Optimal Water Release (m3/s)", label="Optimal Policy", color=:green, legend = :outerbottomright)
     savefig(path * "/policy_waterrelease.png");
 end
 
 function overlay_policy_plot_solar(path, T, u_pi, ps_star)
     # Plot water release from dual-value driven policy
-    plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Lagrangian Water Release Overlayed Solar Simulations",titlefont=font(12))
+    plot(1:T, u_pi, xlabel="Hour", ylabel="Policy Water Release (m3/s)", label="Lagrangian Policy", lw=2,legend = :outertopright,title="Lagrangian Water Release & FPV Generation",titlefont=font(12))
     # Add optimal water release with different yaxis
     plot!(twinx(), 1:T, ps_star, ylabel="Optimal FPV Generation (MWh)", label="FPV Generation", color=:green,legend = :outerbottomright)
     savefig(path * "/policy_waterrelease_solar.png");
+end
+
+function duals_plot(path, T, x, dv_name, eq_name)
+    dv_print = replace(dv_name, r"$|\\|[{}]" => "");
+    println(dv_print)
+    plot1 = plot(1:T, x, lw=2, legend = :topright, label = dv_name, size=(850,800))
+    xlabel!(plot1, "Hour")
+    ylabel!(plot1, "Dual Value " * dv_name)
+    title!(plot1, eq_name * " Dual Value over Historical Simulation")
+    savefig(plot1,  path * "/" * dv_print * "duals.png");
+end
+
+function hhead_plots(path, T, hh, hh_d)
+    
+    ## Plot 1: Hydraulic Head
+    plot1 = plot(1:T, hh, label="Hydraulic Head", lw=2, legend = :outertopright)
+    xlabel!(plot1, "Hour")
+    ylabel!(plot1, "Hydraulic Head [m]")
+    title!(plot1, "Hydraulic Head over Time")
+    savefig(plot1, path * "/hh.png");
+
+    ## Plot 2: Hydraulic Head Derivative
+    plot2 = plot(1:T, hh_d, label="Derivative of Hydraulic Head", lw=2, legend = :outertopright)
+    xlabel!(plot2, "Hour")
+    ylabel!(plot2, "Derivative of Hydraulic Head")
+    title!(plot2, "Derivative of Hydraulic Head over Time")
+    savefig(plot2, path * "/hh_d.png");
+
 end

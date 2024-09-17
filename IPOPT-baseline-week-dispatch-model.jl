@@ -11,6 +11,9 @@ using Ipopt
 using LaTeXStrings
 include("plots.jl")
 
+
+plots = false;
+
 # ----------------- UNIT CONVERSION ----------------- #
 
 function cfs_to_m3s(cfs)
@@ -100,7 +103,7 @@ V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
 e = 0    # evaporation constant [m/day]
 min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels
+min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels (driven by max water release)
 RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
 PF = 1200   # max feeder capacity [MW] (3.3 GW) 
@@ -111,7 +114,7 @@ rho_w = 1000 # density of water [kg/m^3]
 g = 9.8      # acceleration due to gravity [m/s^2]
 
 Uw = sum(U[1:N]); # Weekly Water contract
-VT = V0 + s2hr*sum(q) - Uw # Terminal volume conditions
+# VT = V0 + s2hr*sum(q) - Uw # Terminal volume conditions
 
 # ------------ HYDRAULIC HEAD VARS ------------ #
 a = 15;
@@ -121,7 +124,7 @@ b = 0.13;
 
 # Create the optimization model
 model = Model(Ipopt.Optimizer)
-# model = Model(Gurobi.Optimizer)
+#model = Model(Gurobi.Optimizer)
 
 # Define variables
 @variable(model, V[1:T*N])
@@ -141,8 +144,8 @@ set_lower_bound.(u, min_ut)
 
 # Constraints
 @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-#@constraint(model, WaterContract, s2hr*sum(u) == Uw)
-@constraint(model, WaterContract, VT <= V0 + s2hr*(sum(q) - sum(u))) 
+@constraint(model, WaterContract, s2hr*sum(u) <= Uw)
+#@constraint(model, WaterContract, VT <= V0 + s2hr*(sum(q) - sum(u))) 
 @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
 @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
@@ -162,24 +165,6 @@ obj = objective_value(model);
 @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
 @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
 
-# ---------- PLOTS -------- # 
-
-# Create directory for this run 
-stamp = Dates.format(now(), "mm-dd-yyyy HH.MM.SS") ;
-dir = "./plots/" ;
-path = dir * stamp * " IPOPT";
-mkdir(path)
-
-# Generation Plots
-hpcap = (eta * rho_w *g * a * value.(u) .* (value.(V).^b))/1e6 
-gen_plots(path, T*N, value.(p_s), PS, alpha_norm_w, value.(p_h), hpcap, PF)
-
-# Water release
-release_plots(path, T*N, value.(u), min_ut, max_ut)
-
-# Water release/generation overlaid with electicity price
-release_plots_LMP(path, T*N, value.(u), min_ut, max_ut, L)
-gen_plots_LMP(path, T*N, value.(p_s) + value.(p_h), PF, L)
 
 # ---------- DUAL VALUES -------- # 
 println("Dual Values")
@@ -202,16 +187,38 @@ for i in 2:(T*N-1)
     theta_diff[i] = theta[i] - theta[i-1]
 end
 
-# Plot historically simulated dual values
-duals_plot(path, T*N-1, theta, L"\theta_t", "Mass Balance")
-duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Moving Difference")
-duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
 
-# Plot Lagrangian policy
-policy_plot(path, T*N, policy)
-overlay_policy_plot(path, T*N, policy, value.(u))
-overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
+# ---------- PLOTS -------- # 
 
-head = a * (value.(V).^b) # [m]
-head_deriv = a *b  * value.(V).^(b-1)
-hhead_plots(path, T*N, head, head_deriv)
+if plots
+    # Create directory for this run 
+    stamp = Dates.format(now(), "mm-dd-yyyy HH.MM.SS") ;
+    dir = "./plots/" ;
+    path = dir * stamp * " IPOPT";
+    mkdir(path)
+
+    # Generation Plots
+    hpcap = (eta * rho_w *g * a * value.(u) .* (value.(V).^b))/1e6 
+    gen_plots(path, T*N, value.(p_s), PS, alpha_norm_w, value.(p_h), hpcap, PF)
+
+    # Water release
+    release_plots(path, T*N, value.(u), min_ut, max_ut)
+
+    # Water release/generation overlaid with electicity price
+    release_plots_LMP(path, T*N, value.(u), min_ut, max_ut, L)
+    gen_plots_LMP(path, T*N, value.(p_s) + value.(p_h), PF, L)
+
+    # Plot historically simulated dual values
+    duals_plot(path, T*N-1, theta, L"\theta_t", "Mass Balance")
+    duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Moving Difference")
+    duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
+
+    # Plot Lagrangian policy
+    policy_plot(path, T*N, policy)
+    overlay_policy_plot(path, T*N, policy, value.(u))
+    overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
+
+    head = a * (value.(V).^b) # [m]
+    head_deriv = a *b  * value.(V).^(b-1)
+    hhead_plots(path, T*N, head, head_deriv)
+end

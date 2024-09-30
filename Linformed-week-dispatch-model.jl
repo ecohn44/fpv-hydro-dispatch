@@ -11,7 +11,7 @@ using Ipopt
 include("plots.jl")
 include("functions.jl")
 
-plots = false;
+plots = true;
 
 # ----------------- DATA LOAD / SIMULATION PARAMETERS  ----------------- #
 
@@ -19,7 +19,7 @@ plots = false;
 year = "2022";
 month = "January";
 
-T = 16; # hours (time steps)
+T = 24; # hours (time steps)
 N = 1; # days per week
 s2hr = 3600  # seconds in an hour (delta t)
 
@@ -43,15 +43,17 @@ a = 15;
 b = 0.13; 
 
 
-# ------------ MODEL PREDICTIVE CONTROL ------------ #
+# ------------ LIMITED HORIZON CONTROL ------------ #
 
 # Set moving horizon
 K = 4
 
-# Create storage for optimal control 
-u_star = [0.0 for n=1:T*N-1];
-p_s_star =  [0.0 for n=1:T*N-1];
-p_h_star = [0.0 for n=1:T*N-1];
+# Create storage for optimal control and dual values
+u_star = [0.0 for n=1:T*N];
+p_s_star =  [0.0 for n=1:T*N];
+p_h_star = [0.0 for n=1:T*N];
+v_star = [0.0 for n=1:T*N];
+mu11s = [0.0 for n=1:T*N];
 
 # Loop through total horizon, k is start index for reference 
 for k = 1:T*N-1
@@ -81,17 +83,14 @@ for k = 1:T*N-1
     alpha_h = alpha[k:k+Kh-1] # historic available solar radiation 
 
     # T = 1, N = K for limited subhorizon
-    u, p_s, p_h, mu11 = Lrun_sim(1, Kh, L_h, q_h, alpha_h, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev, u_star)
+    u, p_s, p_h, v, mu11 = Lrun_sim(1, Kh, L_h, q_h, alpha_h, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev, u_star)
 
     # Store control decision for t = 1
     u_star[k] = u[1]
     p_h_star[k] = p_h[1]
     p_s_star[k] = p_s[1]
-
-    # testing 
-    #if k == 2
-    #    break
-    #end
+    v_star[k] = v[1]
+    mu11s[k] = mu11
 
 end
 
@@ -106,27 +105,22 @@ if plots
     mkdir(path)
 
     # Generation Plots
-    hpcap = (eta * rho_w *g * a * value.(u) .* (value.(V).^b))/1e6 
-    gen_plots(path, T*N, value.(p_s), PS, alpha_norm_w, value.(p_h), hpcap, PF)
+    hpcap = (eta * rho_w *g * a * u_star .* (v_star.^b))/1e6 
+    gen_plots(path, T*N, p_s_star, PS, alpha, p_h_star, hpcap, PF)
 
     # Water release
-    release_plots(path, T*N, value.(u), min_ut, max_ut)
+    release_plots(path, T*N, u_star, min_ut, max_ut)
 
     # Water release/generation overlaid with electicity price
-    release_plots_LMP(path, T*N, value.(u), min_ut, max_ut, L)
-    gen_plots_LMP(path, T*N, value.(p_s) + value.(p_h), PF, L)
+    release_plots_LMP(path, T*N, u_star, min_ut, max_ut, L)
+    gen_plots_LMP(path, T*N, p_s_star + p_h_star, PF, L)
 
     # Plot historically simulated dual values
-    duals_plot(path, T*N-1, theta, L"\theta_t", "Mass Balance")
-    duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Moving Difference")
-    duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
+    #duals_plot(path, T*N-1, theta, L"\theta_t", "Mass Balance")
+    #duals_plot(path, T*N-1, theta_diff, L"\theta_t - \theta_{t-1}", "Mass Balance Moving Difference")
+    #duals_plot(path, T*N, mu10, L"\mu_{t,10}", "Energy from Water Release")
 
-    # Plot Lagrangian policy
-    policy_plot(path, T*N, policy)
-    overlay_policy_plot(path, T*N, policy, value.(u))
-    overlay_policy_plot_solar(path, T*N, policy, value.(p_s))
-
-    head = a * (value.(V).^b) # [m]
-    head_deriv = a *b  * value.(V).^(b-1)
+    head = a * (v_star.^b) # [m]
+    head_deriv = a *b  * v_star.^(b-1)
     hhead_plots(path, T*N, head, head_deriv)
 end

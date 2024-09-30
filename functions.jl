@@ -20,8 +20,7 @@ function dailyflow_to_hourly(q, T)
     end
     return hourly_q
 end
-
-function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev, u_star)
+function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
 
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
@@ -32,13 +31,142 @@ function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, P
     @variable(model, V[1:T*N])
     set_lower_bound.(V, min_Vt)
     @variable(model, p_h[1:T*N] >= 0)
-    @variable(model, p_s[1:T*N] >= 0)  
+    @variable(model, p_s[1:T*N] >= 0)
     @variable(model, u[1:T*N])
     set_upper_bound.(u, max_ut)
     set_lower_bound.(u, min_ut)
 
+    # Initial conditions
+    @constraint(model, MassBalInit, V[1] == V0)
+    @constraint(model, RampRateInit, u[1] == min_ut)
+    
+    # Objective function
+    @objective(model, Max, sum(L .* (p_h + p_s)))
+
+    # Constraints
+    @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
+    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
+    @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
+    @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
+
+    # Water Contract Variations
+    @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
+
+    # Solve the optimization problem
+    optimize!(model)
+
+    obj = objective_value(model);
+
+    # Print the results
+    @printf("Total Profit: \$ %d \n", obj)
+    @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
+    @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
+
+    @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
+    @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
+
+    # ---------- DUAL VALUES -------- # 
+    println("Dual Values")
+    println("Water Contract: ", dual.(WaterContract))
+
+    # return optimial control vars
+    return value.(u), value.(p_s), value.(p_h)
+
+end
+
+function run_sim_limitedh(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
+
+    # Create the optimization model
+    model = Model(Ipopt.Optimizer)
+    set_silent(model) # no outputs
+    # model = Model(Gurobi.Optimizer)
+
+    # Define variables
+    @variable(model, V[1:T*N])
+    set_lower_bound.(V, min_Vt)
+    @variable(model, p_h[1:T*N] >= 0)
+    @variable(model, p_s[1:T*N] >= 0)
+    @variable(model, u[1:T*N])
+    set_upper_bound.(u, max_ut)
+    set_lower_bound.(u, min_ut)
+
+    # Initial conditions
+    @constraint(model, MassBalInit, V[1] == V0)
+    if k == 1
+        # first time step water release at min, handles ramp rate
+        @constraint(model, RampRateInit, u[1] == min_ut)
+    else
+        # else, enforce ramp rate with previous release
+        @constraint(model, RampRateInit, RR_dn <= u[1] - u_prev <= RR_up)
+    end
+    
+    # Objective function
+    @objective(model, Max, sum(L .* (p_h + p_s)))
+
+    # Constraints
+    @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
+    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
+    @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
+    @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
+
+    # Water Contract Variations
+    @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
+    # @constraint(model, WaterContract, VT <= V0 + s2hr*(sum(q) - sum(u)))
+    # @constraint(model, WaterContract, V[T*N] >= V0 - Uw + s2hr*sum(q))
+
+    # Solve the optimization problem
+    optimize!(model)
+
+    obj = objective_value(model);
+
+    # Print the results
+    @printf("Total Profit: \$ %d \n", obj)
+    @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
+    @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
+
+    @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
+    @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
+
+    # ---------- DUAL VALUES -------- # 
+    println("Dual Values")
+    println("Water Contract: ", dual.(WaterContract))
+
+    # return optimial control vars
+    return value.(u), value.(p_s), value.(p_h)
+
+end
+
+function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev, u_star)
+
+    # Create the optimization model
+    model = Model(Ipopt.Optimizer)
+    set_silent(model) # no outputs
+    # model = Model(Gurobi.Optimizer)
+
     # Water released so far 
     u_r = s2hr*sum(u_star);
+
+    @printf("Water Remaining: %d m^3 \n \n", Uw-u_r)
+    # Stop water release when contract runs out 
+    # Note: Still have a slight bug releasing more than we have at t = 14?
+    #if U - u_r < 0
+    #    Uw = 0
+    #else
+    #    Uw = U
+    #end
+
+    # Define variables
+    @variable(model, V[1:T*N])
+    set_lower_bound.(V, min_Vt)
+    @variable(model, p_h[1:T*N] >= 0)
+    @variable(model, p_s[1:T*N] >= 0)  
+    @variable(model, u[1:T*N])
+    set_upper_bound.(u, max_ut)
+    set_lower_bound.(u, min_ut)
 
     # Initial conditions
     @constraint(model, MassBalInit, V[1] == V0)
@@ -60,7 +188,7 @@ function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, P
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], p_s[t] == alpha[t]*PS) # POLICY: fix ps
     @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
-    @constraint(model, WaterContract, s2hr*sum(u) <= Uw - u_r)  
+    @constraint(model, WaterContract, 0 <= s2hr*sum(u) <= Uw - u_r)  
 
     # Solve the optimization problem
     optimize!(model)
@@ -85,7 +213,7 @@ function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, P
     println("Water Contract: ", dual.(WaterContract))
 
     # return optimial control vars and duals
-    return value.(u), value.(p_s), value.(p_h), dual.(WaterContract)
+    return value.(u), value.(p_s), value.(p_h), value.(V), dual.(WaterContract)
 
 end
 

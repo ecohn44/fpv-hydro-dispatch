@@ -84,7 +84,7 @@ for k = 1:T*N-1
     VT = V0 + sum(q_h) - Uw # Terminal volume conditions
 
     # T = 1, N = K for limited subhorizon
-    u, p_s, p_h = run_sim(1, Kh, L_h, q_h, alpha_h, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
+    u, p_s, p_h = run_sim_limitedh(1, Kh, L_h, q_h, alpha_h, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
 
     # Store control decision for t = 1
     u_star[k] = u[1]

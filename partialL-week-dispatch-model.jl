@@ -25,7 +25,7 @@ T = 24; # hours (time steps)
 N = 1; # days per week
 s2hr = 3600  # seconds in an hour (delta t)
 
-L, U, S, q, alpha = load_data(year, month, T, N)
+price, U, S, q, alpha = load_data(year, month, T, N)
 
 V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
 Uw = sum(U[1:N]); # Water contract for N days
@@ -46,7 +46,44 @@ b = 0.13;
 
 # ----------------- OPTIMIZATION  ----------------- #
 
-u, p_s, p_h = run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+# Search bounds for DV
+eps = 2;
+L = 0              # minimum(L) - eps;
+R = 1000           # maximum(L) + eps;
+theta = (R + L)/2   
+error = 1
+i = 1
+max_iter = 10 
+# TO DO: make plots that subset on actual value of i
+
+thetas = zeros(Float64, max_iter)
+f0s = zeros(Float64, max_iter)
+U_sims = zeros(Float64, max_iter)
+
+while R - L > error
+    @printf("Iteration: %d \n", i)
+    @printf("Upper Bound: %d \n", R)
+    @printf("Lower Bound: %d \n", L)
+    @printf("Theta: %d \n \n", theta)
+
+    theta = (R + L)/2 
+    u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+
+    if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
+        L = theta
+    end 
+    if U_sim < Uw # decrease penalty to release more water, lower upper bounds
+        R = theta
+    end  
+
+    # store  value of theta 
+    thetas[i] = theta
+    # store value of objective function 
+    U_sims[i] = U_sim
+
+    # iterate 
+    i = i + 1
+end
 
 # ---------- PLOTS -------- # 
 

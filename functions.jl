@@ -20,6 +20,65 @@ function dailyflow_to_hourly(q, T)
     end
     return hourly_q
 end
+
+function run_sim_partialL(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+
+    # Create the optimization model
+    model = Model(Ipopt.Optimizer)
+    set_silent(model) # no outputs
+    # model = Model(Gurobi.Optimizer)
+
+    # Define variables
+    @variable(model, V[1:T*N])
+    set_lower_bound.(V, min_Vt)
+    @variable(model, p_h[1:T*N] >= 0)
+    @variable(model, p_s[1:T*N] >= 0)
+    @variable(model, u[1:T*N])
+    set_upper_bound.(u, max_ut)
+    set_lower_bound.(u, min_ut)
+
+    # Initial conditions
+    @constraint(model, MassBalInit, V[1] == V0)
+    @constraint(model, RampRateInit, u[1] == min_ut)
+    
+    # Objective function
+    # Sum over all time 
+    @objective(model, Max, sum(L .* (p_h + p_s) - theta*u))
+
+    # Constraints
+    @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
+    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
+    @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
+    @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
+
+    # Water Contract Variations
+    # @constraint(model, WaterContract, s2hr*sum(u) <= Uw)  
+
+    # Solve the optimization problem
+    optimize!(model)
+
+    obj = objective_value(model);
+    release = sum(value.(u))*s2hr;
+
+    # Print the results
+    @printf("Total Profit: \$ %d \n", obj)
+    @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
+    @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
+
+    @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
+    @printf("Simulated Total Water Release: %d m^3 \n \n", release)
+
+    # ---------- DUAL VALUES -------- # 
+    # println("Dual Values")
+    # println("Water Contract: ", dual.(WaterContract))
+
+    # return optimal control vars and obj function
+    return value.(u), value.(p_s), value.(p_h), value.(V), obj, release
+
+end
+
 function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
 
     # Create the optimization model

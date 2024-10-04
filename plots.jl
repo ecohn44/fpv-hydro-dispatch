@@ -123,6 +123,16 @@ function duals_plot(path, T, x, dv_name, eq_name)
     savefig(plot1,  path * "/" * dv_print * "duals.png");
 end
 
+function iters_plot(path, T, x, dv_name)
+    dv_print = replace(dv_name, r"$|\\|[{}]" => "");
+    println(dv_print)
+    plot1 = plot(1:T, x, lw=2, legend = :topright, label = dv_name * ": Water Contract", size=(850,800))
+    xlabel!(plot1, "Iteration (k)")
+    ylabel!(plot1, "Dual Value " * dv_name)
+    title!(plot1, "Convergence of the Dual Value over BST Algorithm")
+    savefig(plot1,  path * "/" * dv_print * "duals.png");
+end
+
 function hhead_plots(path, T, hh, hh_d)
     
     ## Plot 1: Hydraulic Head

@@ -14,6 +14,7 @@ include("functions.jl")
 
 
 plots = false;
+make_path = true;
 
 # ----------------- UNIT CONVERSION ----------------- #
 
@@ -85,15 +86,20 @@ while R - L > error
     i = i + 1
 end
 
-# ---------- PLOTS -------- # 
 
-if plots
+# ---------- PLOTS -------- #
+
+if make_path
     # Create directory for this run 
     stamp = Dates.format(now(), "mm-dd-yyyy HH.MM.SS") ;
     dir = "./plots/" ;
-    path = dir * stamp * " IPOPT";
+    path = dir * stamp * " LPartial";
     mkdir(path)
+end 
 
+iters_plot(path, max_iter, thetas, L"\theta_k")
+
+if plots
     # Generation Plots
     hpcap = (eta * rho_w *g * a * value.(u) .* (value.(V).^b))/1e6 
     gen_plots(path, T*N, value.(p_s), PS, alpha_norm_w, value.(p_h), hpcap, PF)

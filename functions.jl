@@ -21,7 +21,18 @@ function dailyflow_to_hourly(q, T)
     return hourly_q
 end
 
-function run_sim_partialL(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+function run_sim_partialL(T, N, L, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+
+    print = false; 
+
+    # Initialize empty vectors to store mass balance and control vars
+    V_s = [] # Reservoir volume
+    append!(V_s, V0) # Add initial condition
+    u_s = [] 
+    append!(u_s, min_ut)
+    ps_s = zeros(Float64, T*N)
+    ph_s = zeros(Float64, T*N)
+    R_s = zeros(Float64, T*N)
 
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
@@ -29,56 +40,73 @@ function run_sim_partialL(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_d
     # model = Model(Gurobi.Optimizer)
 
     # Define variables
-    @variable(model, V[1:T*N])
-    set_lower_bound.(V, min_Vt)
-    @variable(model, p_h[1:T*N] >= 0)
-    @variable(model, p_s[1:T*N] >= 0)
-    @variable(model, u[1:T*N])
-    set_upper_bound.(u, max_ut)
-    set_lower_bound.(u, min_ut)
-
-    # Initial conditions
-    @constraint(model, MassBalInit, V[1] == V0)
-    @constraint(model, RampRateInit, u[1] == min_ut)
+    @variable(model, p_h, lower_bound = 0) # Hydro generation
+    @variable(model, p_s, lower_bound = 0) # Solar generation
+    @variable(model, u, lower_bound = min_ut, upper_bound = max_ut) # Water release 
+    @variable(model, R) # Revenue
     
-    # Objective function
-    # Sum over all time 
-    @objective(model, Max, sum(L .* (p_h + p_s) - theta*u))
+    # Generation Revenue
+    @constraint(model, Rev, R == L[1]p_s + L[1]p_h - theta*u)
 
     # Constraints
-    @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
-    @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
-    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
-    @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
-    @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
+    @constraint(model, ReleaseEnergy, p_h <= (eta * g * rho_w * u * a * (V_s[end]^b))/1e6)
+    @constraint(model, Release, min_ut <= u <= max_ut)
+    @constraint(model, RampRate, RR_dn + u_s[end] <= u <= RR_up + u_s[end])
+    @constraint(model, SolarCap, 0 <= p_s <= PS)
+    @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
-    # Water Contract Variations
-    # @constraint(model, WaterContract, s2hr*sum(u) <= Uw)  
+    # maximize revenue plus degradation value
+    @objective(model, Max, R)
 
-    # Solve the optimization problem
-    optimize!(model)
+    for t = 1:T*N
 
-    obj = objective_value(model);
-    release = sum(value.(u))*s2hr;
+        # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
+        set_normalized_coefficient(Rev, p_s, -L[t])
+        set_normalized_coefficient(Rev, p_h, -L[t])
 
-    # Print the results
-    @printf("Total Profit: \$ %d \n", obj)
-    @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
-    @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
+        # Update solar radiation capacity
+        if alpha[t] == 0 # handling div by 0 cases
+            set_normalized_coefficient(SolarCap, p_s, 1e9)
+        else
+            set_normalized_coefficient(SolarCap, p_s, (1/alpha[t]))
+        end
 
-    @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
-    @printf("Simulated Total Water Release: %d m^3 \n \n", release)
+        # Solve the optimization problem
+        optimize!(model)
 
-    # ---------- DUAL VALUES -------- # 
-    # println("Dual Values")
-    # println("Water Contract: ", dual.(WaterContract))
+        obj = value.(R);
+        release = value.(u)*s2hr; # m3
 
-    # return optimal control vars and obj function
-    return value.(u), value.(p_s), value.(p_h), value.(V), obj, release
+        # Update mass balance + decision variables
+        append!(V_s, V_s[t] + s2hr*q[t] - release) # m3
+        append!(u_s, value.(u)) # m3/s
+        ps_s[t] = value.(p_s)
+        ph_s[t] = value.(p_h)
+        R_s[t] = obj
 
+        if print
+            # Print the hourly results
+            @printf("Total Profit: \$ %d \n", obj)
+            @printf("FPV Profit: \$ %d \n", L[t]*ps_s[t])
+            @printf("Hydropower Profit: \$ %d \n", L[t]*ph_s[t])
+            @printf("Simulated Hourly Water Release: %d m^3 \n \n", release)
+        end
+    end
+
+    total_release = sum(u_s*s2hr)
+    total_revenue = sum(R_s)
+    
+    # Print the final results 
+    @printf("Water Contract: %d m^3 \n ", Uw)
+    @printf("Simulated Release: %d m^3 \n", total_release)
+    @printf("Revenue: %d m^3 \n \n", total_revenue)
+
+    # return optimal control vars (x3), volume state var, total revenue, total release
+    return u_s, ps_s, ph_s, V_s, total_revenue, total_release
+    
 end
 
+# baseline
 function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
 
     # Create the optimization model
@@ -135,6 +163,7 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
 
 end
 
+# model predictive control 
 function run_sim_limitedh(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev)
 
     # Create the optimization model
@@ -199,6 +228,7 @@ function run_sim_limitedh(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_d
 
 end
 
+# decommed: limited horizon relaxation
 function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, k, u_prev, u_star)
 
     # Create the optimization model
@@ -276,6 +306,7 @@ function Lrun_sim(T, N, L, q, alpha, Uw, min_Vt, max_ut, min_ut, RR_up, RR_dn, P
 
 end
 
+# load data for a specific month and year 
 function load_data(year, month, T, N)
     LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
     netflow_path = string("data/netflow-daily-",year,"-USBR.csv");
@@ -320,3 +351,5 @@ function load_data(year, month, T, N)
 
     return L, U, S, q, alpha
 end
+
+# to do: build function to load data for three years

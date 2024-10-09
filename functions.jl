@@ -26,10 +26,10 @@ function run_sim_partialL(T, N, L, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, P
     print = false; 
 
     # Initialize empty vectors to store mass balance and control vars
-    V_s = [] # Reservoir volume
-    append!(V_s, V0) # Add initial condition
-    u_s = [] 
-    append!(u_s, min_ut)
+    V_s = zeros(Float64, T*N + 1) # Reservoir volume
+    V_s[1] = V0 # Add initial condition
+    u_s = zeros(Float64, T*N + 1)
+    u_s[1] = min_ut
     ps_s = zeros(Float64, T*N)
     ph_s = zeros(Float64, T*N)
     R_s = zeros(Float64, T*N)
@@ -49,10 +49,11 @@ function run_sim_partialL(T, N, L, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, P
     @constraint(model, Rev, R == L[1]p_s + L[1]p_h - theta*u)
 
     # Constraints
-    @constraint(model, ReleaseEnergy, p_h <= (eta * g * rho_w * u * a * (V_s[end]^b))/1e6)
+    @constraint(model, ReleaseEnergy, p_h <= (eta * g * rho_w * u * a * (V0^b))/1e6)
+    # @constraint(model, ReleaseEnergy, p_h / ((eta * g * rho_w * u_s[1] * a * (V_s[1]^b))/1e6) <= 1)
     @constraint(model, Release, min_ut <= u <= max_ut)
-    @constraint(model, RampRate, RR_dn + u_s[end] <= u <= RR_up + u_s[end])
-    @constraint(model, SolarCap, 0 <= p_s <= PS)
+    # @constraint(model, RampRate, RR_dn <= u - u_s[1] <= RR_up)
+    @constraint(model, SolarCap, 0 <= p_s/(alpha[1] + 1e-5) <= PS)
     @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
     # maximize revenue plus degradation value
@@ -63,13 +64,8 @@ function run_sim_partialL(T, N, L, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, P
         # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
         set_normalized_coefficient(Rev, p_s, -L[t])
         set_normalized_coefficient(Rev, p_h, -L[t])
-
-        # Update solar radiation capacity
-        if alpha[t] == 0 # handling div by 0 cases
-            set_normalized_coefficient(SolarCap, p_s, 1e9)
-        else
-            set_normalized_coefficient(SolarCap, p_s, (1/alpha[t]))
-        end
+        set_normalized_coefficient(SolarCap, p_s, 1/(alpha[t] + 1e-5)) # offset for div by 0 case
+        # set_normalized_coefficient(ReleaseEnergy, p_h, 1/((eta * g * rho_w * u_s[t] * a * (V_s[t]^b))/1e6))
 
         # Solve the optimization problem
         optimize!(model)
@@ -78,8 +74,8 @@ function run_sim_partialL(T, N, L, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, P
         release = value.(u)*s2hr; # m3
 
         # Update mass balance + decision variables
-        append!(V_s, V_s[t] + s2hr*q[t] - release) # m3
-        append!(u_s, value.(u)) # m3/s
+        V_s[t+1] = V_s[t] + s2hr*q[t] - release # m3, offset by 1 from intial conditions
+        u_s[t+1] = value.(u) # m3/s
         ps_s[t] = value.(p_s)
         ph_s[t] = value.(p_h)
         R_s[t] = obj
@@ -109,6 +105,8 @@ end
 # baseline
 function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
 
+    print = false; 
+
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
     set_silent(model) # no outputs
@@ -132,9 +130,10 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
+    # @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
-    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
+    # @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
     @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
 
@@ -146,19 +145,21 @@ function run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS
 
     obj = objective_value(model);
 
-    # Print the results
-    @printf("Total Profit: \$ %d \n", obj)
-    @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
-    @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
+    if print 
+        # Print the results
+        @printf("Total Profit: \$ %d \n", obj)
+        @printf("Total FPV Profit: \$ %d \n", sum(L.*value.(p_s)))
+        @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
 
-    @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
-    @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
+        @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
+        @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
 
-    # ---------- DUAL VALUES -------- # 
-    println("Dual Values")
-    println("Water Contract: ", dual.(WaterContract))
+        # ---------- DUAL VALUES -------- # 
+        println("Dual Values")
+        println("Water Contract: ", dual.(WaterContract))
+    end 
 
-    # return optimial control vars
+    # return optimal control vars
     return value.(u), value.(p_s), value.(p_h)
 
 end

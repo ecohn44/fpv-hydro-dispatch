@@ -24,7 +24,7 @@ year = "2022";
 month = "January";
 
 T = 24; # hours (constant, time steps)
-N = 7; # days (variable)
+N = 31; # days (variable)
 s2hr = 3600  # seconds in an hour (delta t)
 
 price, U, S, q, alpha = load_data(year, month, T, N)
@@ -34,6 +34,7 @@ Uw = sum(U[1:N]); # Water contract for N days
 e = 0    # evaporation constant [m/day]
 min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
+min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels (driven by max water release)
 RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
 PF = 1200   # max feeder capacity [MW] (3.3 GW) 
@@ -49,19 +50,22 @@ b = 0.13;    # hydraulic head parameter 2
 
 # Search bounds for DV
 eps = 2;
-L = 0              # minimum(L) - eps;
-R = 1000           # maximum(L) + eps;
-theta = (R + L)/2   
+L = 0    #minimum(price)
+R = 500  #maximum(price)
+theta = 170 #(R + L)/2   
 error = 1
 i = 1
-max_iter = 10 # TO DO: make plots that subset on actual value of i
+max_iter = 20 # TO DO: make plots that subset on actual value of i
 
 thetas = zeros(Float64, max_iter)
 f0s = zeros(Float64, max_iter)
 U_sims = zeros(Float64, max_iter)
 
+# Test
+# u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+
 if search 
-    while R - L > error
+    while abs(R - L) > error
         @printf("Iteration: %d \n", i)
         @printf("Upper Bound: %d \n", R)
         @printf("Lower Bound: %d \n", L)
@@ -86,6 +90,9 @@ if search
         i = i + 1
     end
 end
+
+# Run baseline multi-period simulation for comparison
+u_b, ps_b, ph_b = run_sim(T, N, price, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
 
 
 # ---------- PLOTS -------- #

@@ -18,32 +18,44 @@ weeklyplots = false;
 make_path = false;
 search = false;
 
-# -----------------  PARAMETERS  ----------------- #
+# -----------------  DATA LOAD  ----------------- #
+
+years = ["22"] #, "23"]
+months = range(1,1) #2)
+T = 24 # hours (time steps)
 
 # Load in 2022 - 2023 data
-daily, alpha, RTP_s = fullsim_dataload()
+daily, alpha, RTP = fullsim_dataload()
 
-## TO DO :
-T = 24; # hours (constant, time steps)
-N = 31; # days (variable) # TO DO: to number of days in month 
-s2hr = 3600  # seconds in an hour (delta t)
+for y in years
 
-V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
-Uw = sum(U[1:N]); # Water contract for N days
-e = 0    # evaporation constant [m/day]
-min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
-max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels (driven by max water release)
-RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
-RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-PF = 1200   # max feeder capacity [MW] (3.3 GW) 
-PS = 1000   # max solar field capacity [MW] (1 GW) 
-SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
-eta = .9     # efficiency of release-energy conversion
-rho_w = 1000 # density of water [kg/m^3]
-g = 9.8      # acceleration due to gravity [m/s^2]
-a = 15;      # hydraulic head parameter 1 
-b = 0.13;    # hydraulic head parameter 2 
+    for m in months
+        # subset daily data
+        daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
+        N = nrow(daily_s) # number of days in the month 
+
+        # subset price data
+        y_num = parse(Int, y) + 2000
+        RTP_s = filter(row -> row[:Year] == y_num && row[:Month] == m, RTP)
+
+        # subset and duplicate radiation data
+        alpha_s = repeat(alpha[:,m], N)
+
+        ##  OPTIMIZATION SETUP  
+        V0 = daily_s.storage[1] # initial storage conditions
+        Uw = sum(daily_s.release) # monthly water contract
+        q = dailyflow_to_hourly(daily_s.inflow, T) # inflow
+        price = RTP_s.LMP # price 
+
+        # Run baseline multi-period simulation 
+        u_b, ps_b, ph_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
+
+    end
+
+end
+
+
+
 
 # ----------------- OPTIMIZATION  ----------------- #
 
@@ -51,10 +63,10 @@ b = 0.13;    # hydraulic head parameter 2
 eps = 2;
 L = 0    #minimum(price)
 R = 500  #maximum(price)
-theta = 170 #(R + L)/2   
+theta = (R + L)/2   
 error = 1
 i = 1
-max_iter = 20 # TO DO: make plots that subset on actual value of i
+max_iter = 20 
 
 thetas = zeros(Float64, max_iter)
 f0s = zeros(Float64, max_iter)
@@ -68,7 +80,8 @@ if search
         @printf("Theta: %d \n", theta)
 
         theta = (R + L)/2 
-        u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
+    
+        u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
 
         if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
             L = theta
@@ -86,10 +99,6 @@ if search
         i = i + 1
     end
 end
-
-# Run baseline multi-period simulation for comparison
-u_b, ps_b, ph_b = run_sim(T, N, price, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
-
 
 # ---------- PLOTS -------- #
 

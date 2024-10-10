@@ -66,7 +66,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     # Define variables
     @variable(model, p_h, lower_bound = 0) # Hydro generation
     @variable(model, p_s, lower_bound = 0) # Solar generation
-    @variable(model, u, lower_bound = min_ut, upper_bound = max_ut) # Water release 
+    @variable(model, u) # Water release 
     @variable(model, R) # Revenue
     
     # Generation Revenue
@@ -74,13 +74,13 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
 
     # Constraints
     @constraint(model, ReleaseEnergy, p_h <= (eta * g * rho_w * u * a * (V0^b))/1e6)
-    # @constraint(model, ReleaseEnergy, p_h / ((eta * g * rho_w * u_s[1] * a * (V_s[1]^b))/1e6) <= 1)
+    ## BUG @constraint(model, ReleaseEnergy, p_h / ((eta * g * rho_w * u_s[1] * a * (V_s[1]^b))/1e6) <= 1)
     @constraint(model, Release, min_ut <= u <= max_ut)
-    # @constraint(model, RampRate, RR_dn <= u - u_s[1] <= RR_up)
+    ## BUG @constraint(model, RampRate, RR_dn <= u - u_s[1] <= RR_up)
     @constraint(model, SolarCap, 0 <= p_s/(alpha[1] + 1e-5) <= PS)
     @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
-    # maximize revenue plus degradation value
+    # maximize revenue 
     @objective(model, Max, R)
 
     for t = 1:T*N
@@ -155,19 +155,18 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
     @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
-    # @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    #@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
-    # @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
+    @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
     @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
-
-    # Water Contract Variations
     @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
 
     # Solve the optimization problem
     optimize!(model)
 
     obj = objective_value(model);
+    total_release = sum(value.(u))*s2hr
 
     if print 
         # Print the results
@@ -176,15 +175,15 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
         @printf("Total Hydropower Profit: \$ %d \n \n", sum(L.*value.(p_h)))
 
         @printf("Weekly Water Contract: %d m^3 \n \n", Uw)
-        @printf("Simulated Total Water Release: %d m^3 \n \n", sum(value.(u))*s2hr)
+        @printf("Simulated Total Water Release: %d m^3 \n \n", total_release)
 
         # ---------- DUAL VALUES -------- # 
         println("Dual Values")
         println("Water Contract: ", dual.(WaterContract))
     end 
 
-    # return optimal control vars
-    return value.(u), value.(p_s), value.(p_h)
+    # return optimal control vars, revenue, and total release
+    return value.(u), value.(p_s), value.(p_h), obj, total_release
 
 end
 
@@ -375,4 +374,49 @@ function load_data(year, month, T, N)
     alpha = alpha_norm_w[1:T*N]
 
     return L, U, S, q, alpha
+end
+
+function bst_sim(T, N, price, q, alpha_s, V0, Uw)
+    # Search bounds for DV
+    L = 0    #minimum(price)
+    R = 500  #maximum(price)
+    theta = (R + L)/2   
+    error = 1
+    i = 1
+    max_iter = 20 
+
+    thetas = zeros(Float64, max_iter)
+    f0s = zeros(Float64, max_iter)
+    U_sims = zeros(Float64, max_iter)
+
+    while abs(R - L) > error
+        @printf("Iteration: %d \n", i)
+        @printf("Upper Bound: %d \n", R)
+        @printf("Lower Bound: %d \n", L)
+        @printf("Theta: %d \n", theta)
+
+        theta = (R + L)/2 
+
+        u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
+
+        if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
+            L = theta
+        end 
+        if U_sim < Uw # decrease penalty to release more water, lower upper bounds
+            R = theta
+        end  
+
+        # store  value of theta 
+        thetas[i] = theta
+        # store value of objective function 
+        U_sims[i] = U_sim
+        # store value of objective
+        f0s[i] = f0
+
+        # iterate 
+        i = i + 1
+    end
+
+    # return optimal trajectory, optimal DV, and iterations to convergency 
+    return u, p_s, p_h, f0, U_sim, theta, i
 end

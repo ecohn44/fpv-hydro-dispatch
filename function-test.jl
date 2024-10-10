@@ -10,46 +10,74 @@ using Base.Filesystem
 using Ipopt
 include("functions.jl")
 
-# ----------------- DATA LOAD / SIMULATION PARAMETERS ----------------- #
-
-# 1 WEEK SIMULATION FOR JAN 1-7 2022
 year = "2022";
 month = "January";
+month_num = 1;
 
-T = 24; # time step per day
-N = 1; # days per week
-s2hr = 3600  # seconds in an hour (delta t)
+LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
+RTP = DataFrame(CSV.File(LMP_path));
+RTP_2d = [row.LMP for row in eachrow(RTP)];
 
-L, U, S, q, alpha = load_data(year, month, T, N)
+# ----------------- DATA LOAD / SIMULATION PARAMETERS ----------------- #
+y = "22"
+m = 1
 
-Uw = sum(U[1:N]); # Weekly Water contract
-V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
-e = 0    # evaporation constant [m/day]
-min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
-max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels
-RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
-RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-PF = 1200   # max feeder capacity [MW] (3.3 GW) 
-PS = 1000   # max solar field capacity [MW] (1 GW) 
-SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
-eta = .9     # efficiency of release-energy conversion
-rho_w = 1000 # density of water [kg/m^3]
-g = 9.8      # acceleration due to gravity [m/s^2]
-a = 15; # HYDRAULIC HEAD VARS
-b = 0.13; #  HYDRAULIC HEAD VARS
+daily, alpha, _ = fullsim_dataload()
 
-# ------------ RUN OPTIMIZATION ------------ #
+# subset daily data
+daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
+N = 31 #nrow(daily_s) # number of days in the month 
+price = RTP_2d[1:T*N,1];    # hourly LMP [$/MWh]
 
-# u, p_s, p_h = run_sim(T, N, L, q, alpha, min_Vt, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b)
+# subset price data
+y_num = parse(Int, y) + 2000
+#RTP_s = filter(row -> row[:Year] == y_num && row[:Month] == m, RTP)
 
-for k = 1:T*N-1
-    
-    # update horizon for end of period edge cases
-    if k > T*N - K
-        Kh = T*N-k
-    else
-        Kh = K
-    end
-    @printf("k = %d; Kh = %d \n", k, Kh)
+# subset and duplicate radiation data
+alpha_s = repeat(alpha[:,m], N)
+
+##  OPTIMIZATION SETUP  
+V0 = daily_s.storage[1] # initial storage conditions
+Uw = sum(daily_s.release[1:N]) # monthly water contract
+q = dailyflow_to_hourly(daily_s.inflow, T)[1:T*N] # inflow
+# price = RTP_s.LMP[1:T*N] # price 
+
+# Search bounds for DV
+eps = 2;
+L = 0   #minimum(price)
+R = 500  #maximum(price)
+theta = (R + L)/2   
+error = 1
+i = 1
+max_iter = 20 
+
+thetas = zeros(Float64, max_iter)
+f0s = zeros(Float64, max_iter)
+U_sims = zeros(Float64, max_iter)
+
+while abs(R - L) > error
+    @printf("Iteration: %d \n", i)
+    @printf("Upper Bound: %d \n", R)
+    @printf("Lower Bound: %d \n", L)
+    @printf("Theta: %d \n", theta)
+
+    theta = (R + L)/2 
+
+    u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
+
+    if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
+        L = theta
+    end 
+    if U_sim < Uw # decrease penalty to release more water, lower upper bounds
+        R = theta
+    end  
+
+    # store  value of theta 
+    thetas[i] = theta
+    # store value of objective function 
+    U_sims[i] = U_sim
+
+    # iterate 
+    i = i + 1
 end
+

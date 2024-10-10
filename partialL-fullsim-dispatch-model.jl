@@ -18,14 +18,24 @@ weeklyplots = false;
 make_path = false;
 search = false;
 
+# Temp
+year = "2022";
+month = "January";
+month_num = 1;
+
+LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
+RTP = DataFrame(CSV.File(LMP_path));
+RTP_2d = [row.LMP for row in eachrow(RTP)];
+price = RTP_2d[1:T*N,1];
+
 # -----------------  DATA LOAD  ----------------- #
 
 years = ["22"] #, "23"]
-months = range(1,1) #2)
+months = range(1,1) #12)
 T = 24 # hours (time steps)
 
 # Load in 2022 - 2023 data
-daily, alpha, RTP = fullsim_dataload()
+daily, alpha, _ = fullsim_dataload()
 
 for y in years
 
@@ -36,7 +46,7 @@ for y in years
 
         # subset price data
         y_num = parse(Int, y) + 2000
-        RTP_s = filter(row -> row[:Year] == y_num && row[:Month] == m, RTP)
+        # RTP_s = filter(row -> row[:Year] == y_num && row[:Month] == m, RTP)
 
         # subset and duplicate radiation data
         alpha_s = repeat(alpha[:,m], N)
@@ -45,59 +55,16 @@ for y in years
         V0 = daily_s.storage[1] # initial storage conditions
         Uw = sum(daily_s.release) # monthly water contract
         q = dailyflow_to_hourly(daily_s.inflow, T) # inflow
-        price = RTP_s.LMP # price 
+        # price = RTP_s.LMP # price 
 
+        ## OPTIMIZATION
         # Run baseline multi-period simulation 
-        u_b, ps_b, ph_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
+        u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
 
+        # Run partially relaxed formulation
+        u, p_s, p_h, f0, U_sim, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
     end
 
-end
-
-
-
-
-# ----------------- OPTIMIZATION  ----------------- #
-
-# Search bounds for DV
-eps = 2;
-L = 0    #minimum(price)
-R = 500  #maximum(price)
-theta = (R + L)/2   
-error = 1
-i = 1
-max_iter = 20 
-
-thetas = zeros(Float64, max_iter)
-f0s = zeros(Float64, max_iter)
-U_sims = zeros(Float64, max_iter)
-
-if search 
-    while abs(R - L) > error
-        @printf("Iteration: %d \n", i)
-        @printf("Upper Bound: %d \n", R)
-        @printf("Lower Bound: %d \n", L)
-        @printf("Theta: %d \n", theta)
-
-        theta = (R + L)/2 
-    
-        u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
-
-        if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
-            L = theta
-        end 
-        if U_sim < Uw # decrease penalty to release more water, lower upper bounds
-            R = theta
-        end  
-
-        # store  value of theta 
-        thetas[i] = theta
-        # store value of objective function 
-        U_sims[i] = U_sim
-
-        # iterate 
-        i = i + 1
-    end
 end
 
 # ---------- PLOTS -------- #

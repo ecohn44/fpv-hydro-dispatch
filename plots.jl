@@ -55,6 +55,34 @@ function release_plots(path, T, u, min, max)
     savefig(plot1,  path * "/release.png");
 end
 
+function release_overlay_plots(path, T, u_b, u, min, max)
+    # plot baseline
+    plot1 = plot(1:T, u_b, xlabel="Hour", ylabel="Release (m3)", title="Hourly Water Release of Baseline and Relaxed Policy", label="Baseline Policy", lw=2, legend = :topright)
+    # plot relaxed
+    plot!(1:T, u, label="Relaxed Policy", color =:purple)
+    # Add maximum th 
+    hline!(plot1, [max], color=:red, linestyle=:dash, label="Max Release")
+    # Add min th
+    hline!(plot1, [min], color=:red, linestyle=:dash, label="Min Release")
+    xlabel!(plot1, "Hour")
+    ylabel!(plot1, "Water Release (m3)")
+    title!(plot1, "Hourly Water Release")
+    savefig(plot1,  path * "/release_overlay.png");
+end
+
+function generation_overlay_plots(path, T, p_b, p, type, max)
+    # plot baseline
+    plot1 = plot(1:T, p_b, label="Baseline Policy", lw=2, legend = :topright)
+    # plot relaxed
+    plot!(1:T, p, label="Relaxed Policy", color =:purple)
+    # Add maximum th 
+    hline!(plot1, [max], color=:red, linestyle=:dash, label="Capacity")
+    xlabel!(plot1, "Hour")
+    ylabel!(plot1, type*" Generation (MWh)")
+    title!(plot1, "Comparison of " *type* " Generation Policies")
+    savefig(plot1,  path * "/"*type*"_generation_overlay.png");
+end
+
 function release_plots_LMP(path, T, u, min, max, L)
     plot(1:T, u, xlabel="Hour", ylabel="Release (m3)", label="Water Release", lw=2,legend = :outertopright,title="Hourly Water Release vs Local Marginal Price",titlefont=font(12))
     # Add maximum th 

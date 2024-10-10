@@ -13,12 +13,16 @@ include("plots.jl")
 include("functions.jl")
 include("dataload.jl")
 
+global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
+global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
+global PF = 1200   # max feeder capacity [MW] (3.3 GW) 
+global PS = 1000   # max solar field capacity [MW] (1 GW) 
 
+monthly_overlayplots = true;
 weeklyplots = false;
-make_path = false;
-search = false;
+make_path = true;
 
-# Temp
+# Temp -- Filler price data -- 
 year = "2022";
 month = "January";
 month_num = 1;
@@ -63,6 +67,16 @@ for y in years
 
         # Run partially relaxed formulation
         u, p_s, p_h, f0, U_sim, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
+
+        ## MONTHLY SUMMARY
+        @printf("Summary for Month: %d \n", m)
+        @printf("Baseline Policy Obj Function: \$ %d \n", f0_b)
+        @printf("Relaxed Policy Obj Function: \$ %d \n", f0)
+        @printf("Water Contract: %d m3 \n", Uw)
+        @printf("Water Release (Baseline): %d m3 \n", U_sim_b)
+        @printf("Water Release (Baseline): %d m3 \n", U_sim)
+        @printf("Dual Value: %d \n", theta)
+        @printf("Iteratons to Convergence: %d \n \n", i)
     end
 
 end
@@ -76,6 +90,26 @@ if make_path
     path = dir * stamp * " LPartial";
     mkdir(path)
 end 
+
+if monthly_overlayplots
+    # plot price of electricity 
+    LMP_plot(path, T*N, price) 
+    
+    # plot overlay of baseline water release with price
+    release_plots_LMP(path, T*N, u_b, min_ut, max_ut, price) 
+
+    # plot overlay of water releases 
+    release_overlay_plots(path, T*N, u_b, u[2:end], min_ut, max_ut)
+
+    # plot overlay of solar generation 
+    generation_overlay_plots(path, T*N, ps_b, p_s, "Solar", PS)
+
+    # plot overlay of hydropower generation
+    generation_overlay_plots(path, T*N, ph_b, p_h, "Hydropower", PF)
+
+    # plot overlay of total generation
+    generation_overlay_plots(path, T*N, ph_b + ps_b, p_h + p_s, "Joint", PF)
+end
 
 if weeklyplots
     # Convergence Plot

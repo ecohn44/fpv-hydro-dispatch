@@ -117,7 +117,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     total_revenue = sum(R_s)
     
     # Print the final results 
-    @printf("Water Contract: %d m^3 \n ", Uw)
+    @printf("Water Contract: %d m^3 \n", Uw)
     @printf("Simulated Release: %d m^3 \n", total_release)
     @printf("Revenue: %d m^3 \n \n", total_revenue)
 
@@ -156,7 +156,7 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
     @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
     #@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
-    @constraint(model, Release[t in 1:T*N], min_ut <= u[t] <= max_ut)
+    @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
     @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)

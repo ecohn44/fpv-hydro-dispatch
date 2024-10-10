@@ -17,17 +17,16 @@ plots = false;
 make_path = false;
 search = true;
 
-# ----------------- UNIT CONVERSION ----------------- #
+# -----------------  PARAMETERS  ----------------- #
 
 # 1 WEEK SIMULATION FOR JAN 1-7 2022
 year = "2022";
 month = "January";
+price, U, S, q, alpha = load_data(year, month, T, N)
 
 T = 24; # hours (constant, time steps)
-N = 31; # days (variable)
+N = 31; # days (variable) # TO DO: to number of days in month 
 s2hr = 3600  # seconds in an hour (delta t)
-
-price, U, S, q, alpha = load_data(year, month, T, N)
 
 V0 = S[1]   # initial reservoir conditions [~1.9 e10 m3]
 Uw = sum(U[1:N]); # Water contract for N days

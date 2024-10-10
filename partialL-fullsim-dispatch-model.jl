@@ -11,19 +11,19 @@ using Ipopt
 using LaTeXStrings
 include("plots.jl")
 include("functions.jl")
+include("dataload.jl")
 
 
-plots = false;
+weeklyplots = false;
 make_path = false;
-search = true;
+search = false;
 
 # -----------------  PARAMETERS  ----------------- #
 
-# 1 WEEK SIMULATION FOR JAN 1-7 2022
-year = "2022";
-month = "January";
-price, U, S, q, alpha = load_data(year, month, T, N)
+# Load in 2022 - 2023 data
+daily, alpha, RTP_s = fullsim_dataload()
 
+## TO DO :
 T = 24; # hours (constant, time steps)
 N = 31; # days (variable) # TO DO: to number of days in month 
 s2hr = 3600  # seconds in an hour (delta t)
@@ -59,9 +59,6 @@ max_iter = 20 # TO DO: make plots that subset on actual value of i
 thetas = zeros(Float64, max_iter)
 f0s = zeros(Float64, max_iter)
 U_sims = zeros(Float64, max_iter)
-
-# Test
-# u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha, max_ut, min_ut, RR_up, RR_dn, PF, PS, V0, s2hr, eta, g, rho_w, a, b, theta)
 
 if search 
     while abs(R - L) > error
@@ -104,7 +101,7 @@ if make_path
     mkdir(path)
 end 
 
-if plots
+if weeklyplots
     # Convergence Plot
     iters_plot(path, max_iter, thetas, L"\theta_k")
     

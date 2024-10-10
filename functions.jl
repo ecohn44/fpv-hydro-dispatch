@@ -4,6 +4,12 @@ function cfs_to_m3s(cfs)
     return cfs * conversion_factor
 end
 
+function min_max_normalize(column)
+    col_min = minimum(column)
+    col_max = maximum(column)
+    return (column .- col_min) ./ (col_max - col_min)
+end
+
 function af_to_m3(acft)
     # Conversion factor: 1 acre-foot is approximately 1233.48 cubic meters
     conversion_factor = 1233.48

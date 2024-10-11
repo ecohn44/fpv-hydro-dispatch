@@ -25,6 +25,7 @@ make_path = false;
 
 # -----------------  DATA LOAD  ----------------- #
 println("--- SIMULATION BEGIN ---")
+
 # Temp -- Filler price data -- 
 year = "2022";
 month = "January";
@@ -33,8 +34,9 @@ month_num = 1;
 LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
 RTP = DataFrame(CSV.File(LMP_path));
 RTP_2d = [row.LMP for row in eachrow(RTP)];
+N = 31
 price = RTP_2d[1:T*N,1];
-# End Temp -- 
+# End Temp --------- 
 
 years = ["22"] #, "23"]
 months = range(1,1) #12)
@@ -68,7 +70,9 @@ for y in years
         u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
 
         # Run partially relaxed formulation
-        u, p_s, p_h, U_sim, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
+        _, _, _, _, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
+        # run one more time with optimal theta
+        u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
 
         ## MONTHLY SUMMARY
         @printf("Summary for Month: %d \n", m)
@@ -78,7 +82,7 @@ for y in years
         @printf("Water Release (Baseline): %d m3 \n", U_sim_b)
         @printf("Water Release (Relaxed): %d m3 \n", U_sim)
         @printf("Dual Value: %d \n", theta)
-        @printf("Iteratons to Convergence: %d \n \n", i)
+        @printf("Iterations to Convergence: %d \n \n", i)
     end
 
 end
@@ -142,3 +146,5 @@ if weeklyplots
     head_deriv = a *b  * value.(V).^(b-1)
     hhead_plots(path, T*N, head, head_deriv)
 end
+
+println("--- SIMULATION END ---")

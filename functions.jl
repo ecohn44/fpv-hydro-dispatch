@@ -141,7 +141,7 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
     @constraint(model, RampRateInit, u[1] == min_ut)
     
     # Objective function
-    @objective(model, Max, sum(L[1] .* (p_h + p_s)))
+    @objective(model, Max, sum(L .* (p_h + p_s)))
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
@@ -368,10 +368,10 @@ end
 
 function bst_sim(T, N, price, q, alpha_s, V0, Uw)
     # Search bounds for DV
-    L = 0    #minimum(price)
-    R = 500  #maximum(price)
+    L = 0.0    #minimum(price)
+    R = 500.0  #maximum(price)
     theta = (R + L)/2   
-    error = 1
+    error = .01
     i = 1
     max_iter = 20 
 

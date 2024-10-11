@@ -52,11 +52,9 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     # Initialize empty vectors to store mass balance and control vars
     V_s = zeros(Float64, T*N + 1) # Reservoir volume
     V_s[1] = V0 # Add initial condition
-    u_s = zeros(Float64, T*N + 1)
-    u_s[1] = min_ut
+    u_s = zeros(Float64, T*N)
     ps_s = zeros(Float64, T*N)
     ph_s = zeros(Float64, T*N)
-    R_s = zeros(Float64, T*N)
 
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
@@ -69,67 +67,60 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     @variable(model, u) # Water release 
     @variable(model, R) # Revenue
     
-    # Generation Revenue
+    # Objective Function
     @constraint(model, Rev, R == L[1]p_s + L[1]p_h - theta*u)
 
     # Constraints
-    @constraint(model, ReleaseEnergy, p_h <= (eta * g * rho_w * u * a * (V0^b))/1e6)
-    ## BUG @constraint(model, ReleaseEnergy, p_h / ((eta * g * rho_w * u_s[1] * a * (V_s[1]^b))/1e6) <= 1)
+    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
     @constraint(model, Release, min_ut <= u <= max_ut)
-    ## BUG @constraint(model, RampRate, RR_dn <= u - u_s[1] <= RR_up)
-    @constraint(model, SolarCap, 0 <= p_s/(alpha[1] + 1e-5) <= PS)
+    @constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
+    @constraint(model, RampRateUp, u <= RR_up + u_s[1])
+    @constraint(model, SolarCap, p_s <= alpha[1]*PS)
     @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
     # maximize revenue 
     @objective(model, Max, R)
 
     for t = 1:T*N
-
         # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
         set_normalized_coefficient(Rev, p_s, -L[t])
         set_normalized_coefficient(Rev, p_h, -L[t])
-        set_normalized_coefficient(SolarCap, p_s, 1/(alpha[t] + 1e-5)) # offset for div by 0 case
-        # set_normalized_coefficient(ReleaseEnergy, p_h, 1/((eta * g * rho_w * u_s[t] * a * (V_s[t]^b))/1e6))
+        set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V[t]^b))/1e6))
+        set_normalized_rhs(SolarCap, alpha[t]*PS)
+
+        if t == 1 # fix initial condition for ramp rate
+            set_normalized_rhs(RampRateUp, min_ut)
+            set_normalized_rhs(RampRateDn, -min_ut)
+        else
+            set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
+            set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
+        end
 
         # Solve the optimization problem
         optimize!(model)
 
-        obj = value.(R);
-        release = value.(u)*s2hr; # m3
-
         # Update mass balance + decision variables
-        V_s[t+1] = V_s[t] + s2hr*q[t] - release # m3, offset by 1 from intial conditions
-        u_s[t+1] = value.(u) # m3/s
+        V_s[t+1] = V_s[t] + s2hr*(q[t] - value.(u)) # m3, offset by 1 from intial conditions
+        u_s[t] = value.(u) # m3/s
         ps_s[t] = value.(p_s)
         ph_s[t] = value.(p_h)
-        R_s[t] = obj
-
-        if print
-            # Print the hourly results
-            @printf("Total Profit: \$ %d \n", obj)
-            @printf("FPV Profit: \$ %d \n", L[t]*ps_s[t])
-            @printf("Hydropower Profit: \$ %d \n", L[t]*ph_s[t])
-            @printf("Simulated Hourly Water Release: %d m^3 \n \n", release)
-        end
     end
 
     total_release = sum(u_s*s2hr)
-    total_revenue = sum(R_s)
     
     # Print the final results 
     @printf("Water Contract: %d m^3 \n", Uw)
-    @printf("Simulated Release: %d m^3 \n", total_release)
-    @printf("Revenue: %d m^3 \n \n", total_revenue)
+    @printf("Simulated Release: %d m^3 \n \n", total_release)
 
     # return optimal control vars (x3), volume state var, total revenue, total release
-    return u_s, ps_s, ph_s, V_s, total_revenue, total_release
+    return u_s, ps_s, ph_s, V_s, total_release
     
 end
 
 # baseline
 function run_sim(T, N, L, q, alpha, Uw, V0)
 
-    print = false; 
+    print = true; 
 
     # Create the optimization model
     model = Model(Ipopt.Optimizer)
@@ -150,12 +141,11 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
     @constraint(model, RampRateInit, u[1] == min_ut)
     
     # Objective function
-    @objective(model, Max, sum(L .* (p_h + p_s)))
+    @objective(model, Max, sum(L[1] .* (p_h + p_s)))
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
-    #@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha[t]*PS)
@@ -386,7 +376,6 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
     max_iter = 20 
 
     thetas = zeros(Float64, max_iter)
-    f0s = zeros(Float64, max_iter)
     U_sims = zeros(Float64, max_iter)
 
     while abs(R - L) > error
@@ -397,7 +386,7 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
 
         theta = (R + L)/2 
 
-        u, p_s, p_h, V, f0, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
+        u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta);
 
         if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
             L = theta
@@ -410,13 +399,11 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
         thetas[i] = theta
         # store value of objective function 
         U_sims[i] = U_sim
-        # store value of objective
-        f0s[i] = f0
 
         # iterate 
         i = i + 1
     end
 
     # return optimal trajectory, optimal DV, and iterations to convergency 
-    return u, p_s, p_h, f0, U_sim, theta, i
+    return u, p_s, p_h, U_sim, theta, i
 end

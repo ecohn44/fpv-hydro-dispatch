@@ -18,10 +18,13 @@ global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s]
 global PF = 1200   # max feeder capacity [MW] (3.3 GW) 
 global PS = 1000   # max solar field capacity [MW] (1 GW) 
 
-monthly_overlayplots = true;
+monthly_overlayplots = false;
 weeklyplots = false;
-make_path = true;
+make_path = false;
 
+
+# -----------------  DATA LOAD  ----------------- #
+println("--- SIMULATION BEGIN ---")
 # Temp -- Filler price data -- 
 year = "2022";
 month = "January";
@@ -31,8 +34,7 @@ LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
 RTP = DataFrame(CSV.File(LMP_path));
 RTP_2d = [row.LMP for row in eachrow(RTP)];
 price = RTP_2d[1:T*N,1];
-
-# -----------------  DATA LOAD  ----------------- #
+# End Temp -- 
 
 years = ["22"] #, "23"]
 months = range(1,1) #12)
@@ -66,15 +68,15 @@ for y in years
         u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
 
         # Run partially relaxed formulation
-        u, p_s, p_h, f0, U_sim, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
+        u, p_s, p_h, U_sim, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
 
         ## MONTHLY SUMMARY
         @printf("Summary for Month: %d \n", m)
-        @printf("Baseline Policy Obj Function: \$ %d \n", f0_b)
-        @printf("Relaxed Policy Obj Function: \$ %d \n", f0)
+        @printf("Baseline Policy Revenue: \$ %d \n", f0_b)
+        @printf("Relaxed Policy Revenue: \$ %d \n", sum(price.*(p_s + p_h)))
         @printf("Water Contract: %d m3 \n", Uw)
         @printf("Water Release (Baseline): %d m3 \n", U_sim_b)
-        @printf("Water Release (Baseline): %d m3 \n", U_sim)
+        @printf("Water Release (Relaxed): %d m3 \n", U_sim)
         @printf("Dual Value: %d \n", theta)
         @printf("Iteratons to Convergence: %d \n \n", i)
     end
@@ -99,7 +101,7 @@ if monthly_overlayplots
     release_plots_LMP(path, T*N, u_b, min_ut, max_ut, price) 
 
     # plot overlay of water releases 
-    release_overlay_plots(path, T*N, u_b, u[2:end], min_ut, max_ut)
+    release_overlay_plots(path, T*N, u_b, u, min_ut, max_ut)
 
     # plot overlay of solar generation 
     generation_overlay_plots(path, T*N, ps_b, p_s, "Solar", PS)

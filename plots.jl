@@ -55,6 +55,14 @@ function release_plots(path, T, u, min, max)
     savefig(plot1,  path * "/release.png");
 end
 
+function ramp_rate(path, T, u)
+    plot(u[2:end]-u[1:end-1], label = "Simulated Ramp Rate", legend = :outertopright)   
+    hline!([RR_up], color=:red, linestyle=:dash, label="Max Ramp Rate")
+    hline!([RR_dn], color=:red, linestyle=:dash, label="Min Ramp Rate")
+    title!("Relaxed Ramp Rate for Simulated Policy")
+    savefig(path * "/ramp_rate.png");
+end 
+
 function release_overlay_plots(path, T, u_b, u, min, max)
     # plot baseline
     plot1 = plot(1:T, u_b, xlabel="Hour", ylabel="Release (m3)", title="Hourly Water Release of Baseline and Relaxed Policy", label="Baseline Policy", lw=2, legend = :topright)

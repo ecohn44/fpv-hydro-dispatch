@@ -13,79 +13,64 @@ include("plots.jl")
 include("functions.jl")
 include("dataload.jl")
 
+global s2hr = 3600  # seconds in an hour (delta t)
 global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
+global RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
+global RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
 global PF = 1200   # max feeder capacity [MW] (3.3 GW) 
 global PS = 1000   # max solar field capacity [MW] (1 GW) 
+global SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
+global eta = .9     # efficiency of release-energy conversion
+global rho_w = 1000 # density of water [kg/m^3]
+global g = 9.8      # acceleration due to gravity [m/s^2]
+global a = 15;      # hydraulic head parameter 1 
+global b = 0.13;    # hydraulic head parameter 2 
 
-monthly_overlayplots = false;
+monthly_overlayplots = true;
 weeklyplots = false;
-make_path = false;
-
+make_path = true;
 
 # -----------------  DATA LOAD  ----------------- #
 println("--- SIMULATION BEGIN ---")
 
-# Temp -- Filler price data -- 
-year = "2022";
-month = "January";
-month_num = 1;
-
-LMP_path = string("data/LMP-meads-2-N101-",month,year,".csv");
-RTP = DataFrame(CSV.File(LMP_path));
-RTP_2d = [row.LMP for row in eachrow(RTP)];
-N = 31
-price = RTP_2d[1:T*N,1];
-# End Temp --------- 
-
-years = ["22"] #, "23"]
-months = range(1,1) #12)
+# years = ["22", "23"]
+# months = range(1,12)
+y = "22"
+m = 1
 T = 24 # hours (time steps)
 
-# Load in 2022 - 2023 data
-daily, alpha, RTP = fullsim_dataload()
+# Load in 2022 - 2023 data & subset for month and year
+daily, alpha, RTP = fullsim_dataload();
+daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
+RTP_s = filter(row -> row[:Year] == "20"*y && row[:Month] == string(m), RTP)
+alpha_s = repeat(alpha[:,m], N)
+N = nrow(daily_s) # number of days in the month 
 
-for y in years
+##  OPTIMIZATION SETUP  
+V0 = daily_s.storage[1] # initial storage conditions
+global min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels 
+Uw = sum(daily_s.release) # monthly water contract
+q = dailyflow_to_hourly(daily_s.inflow, T) # inflow
+price = RTP_s.MW # price 
 
-    for m in months
-        # subset daily data
-        daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
-        N = nrow(daily_s) # number of days in the month 
+## OPTIMIZATION
+# Run baseline multi-period simulation 
+u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
 
-        # subset price data
-        y_num = parse(Int, y) + 2000
-        # RTP_s = filter(row -> row[:Year] == y_num && row[:Month] == m, RTP)
+# Run partially relaxed formulation
+u, p_s, p_h, U_sim, theta = bst_sim(T, N, price, q, alpha_s, V0, Uw)
+# run one more time with optimal theta
+# u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
 
-        # subset and duplicate radiation data
-        alpha_s = repeat(alpha[:,m], N)
-
-        ##  OPTIMIZATION SETUP  
-        V0 = daily_s.storage[1] # initial storage conditions
-        Uw = sum(daily_s.release) # monthly water contract
-        q = dailyflow_to_hourly(daily_s.inflow, T) # inflow
-        # price = RTP_s.LMP # price 
-
-        ## OPTIMIZATION
-        # Run baseline multi-period simulation 
-        u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
-
-        # Run partially relaxed formulation
-        _, _, _, _, theta, i = bst_sim(T, N, price, q, alpha_s, V0, Uw)
-        # run one more time with optimal theta
-        u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
-
-        ## MONTHLY SUMMARY
-        @printf("Summary for Month: %d \n", m)
-        @printf("Baseline Policy Revenue: \$ %d \n", f0_b)
-        @printf("Relaxed Policy Revenue: \$ %d \n", sum(price.*(p_s + p_h)))
-        @printf("Water Contract: %d m3 \n", Uw)
-        @printf("Water Release (Baseline): %d m3 \n", U_sim_b)
-        @printf("Water Release (Relaxed): %d m3 \n", U_sim)
-        @printf("Dual Value: %d \n", theta)
-        @printf("Iterations to Convergence: %d \n \n", i)
-    end
-
-end
+## MONTHLY SUMMARY
+@printf("Summary for Month: %d \n", m)
+@printf("Baseline Policy Revenue: \$ %d \n", f0_b)
+@printf("Relaxed Policy Revenue: \$ %d \n", sum(price.*(p_s + p_h)))
+@printf("Water Contract: %d m3 \n", Uw)
+@printf("Water Release (Baseline): %d m3 \n", U_sim_b)
+@printf("Water Release (Relaxed): %d m3 \n", U_sim)
+@printf("Dual Value: %d \n", theta)
 
 # ---------- PLOTS -------- #
 

@@ -9,7 +9,7 @@ include("functions.jl")
 
 function fullsim_dataload()
 
-    LMP_path = string("data/fullsim/price_data.csv");
+    LMP_path = string("data/fullsim/price-data.csv");
     inflow_path = string("data/fullsim/lake-powell-inflow-daily.csv");
     solarrad_path = "data/fullsim/solar-rad-capacity.csv";
     release_path = string("data/fullsim/lake-mead-release.csv");
@@ -17,9 +17,13 @@ function fullsim_dataload()
     powell_storage_path = string("data/fullsim/lake-powell-storage-daily.csv");
 
     # Read in Local Marginal Price for Lake Mead
-    RTP = DataFrame(CSV.File(LMP_path));
-    # Filter for 2022-2023
-    RTP_s = subset(RTP, :Year => y -> y .== 2022 .|| y .== 2023)
+    RTP = DataFrame(CSV.File(LMP_path)); # currently just 2022
+    # datetime handling
+    split_datetime = split.(RTP.OPR_DT, "/")
+    # Create new columns for Month, Day, and Year by extracting each part
+    RTP.Month = getindex.(split_datetime, 1)  # Extract Month
+    RTP.Day   = getindex.(split_datetime, 2)  # Extract Day
+    RTP.Year  = getindex.(split_datetime, 3)  # Extract Year
 
     # Read in system inflow (lake powell inflow)
     inflow = DataFrame(CSV.File(inflow_path));
@@ -81,5 +85,5 @@ function fullsim_dataload()
         storage = pstorage_s.storagem3 + mstorage_s.storagem3
     )
 
-    return daily, alpha, RTP_s
+    return daily, alpha, RTP
 end

@@ -1,20 +1,3 @@
-## Global Variables
-
-global s2hr = 3600  # seconds in an hour (delta t)
-global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
-global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-global min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels (driven by max water release)
-global RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
-global RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-global PF = 1200   # max feeder capacity [MW] (3.3 GW) 
-global PS = 1000   # max solar field capacity [MW] (1 GW) 
-global SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
-global eta = .9     # efficiency of release-energy conversion
-global rho_w = 1000 # density of water [kg/m^3]
-global g = 9.8      # acceleration due to gravity [m/s^2]
-global a = 15;      # hydraulic head parameter 1 
-global b = 0.13;    # hydraulic head parameter 2 
-
 
 function cfs_to_m3s(cfs)
     # Conversion factor: 1 cfs is approximately 0.0283168 m³/s
@@ -50,8 +33,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     print = false; 
 
     # Initialize empty vectors to store mass balance and control vars
-    V_s = zeros(Float64, T*N + 1) # Reservoir volume
-    V_s[1] = V0 # Add initial condition
+    V_s = zeros(Float64, T*N) # Reservoir volume
     u_s = zeros(Float64, T*N)
     ps_s = zeros(Float64, T*N)
     ph_s = zeros(Float64, T*N)
@@ -85,22 +67,27 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
         # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
         set_normalized_coefficient(Rev, p_s, -L[t])
         set_normalized_coefficient(Rev, p_h, -L[t])
-        set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V[t]^b))/1e6))
         set_normalized_rhs(SolarCap, alpha[t]*PS)
 
         if t == 1 # fix initial condition for ramp rate
             set_normalized_rhs(RampRateUp, min_ut)
             set_normalized_rhs(RampRateDn, -min_ut)
+            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
         else
             set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
             set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
+            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
         end
 
         # Solve the optimization problem
         optimize!(model)
 
         # Update mass balance + decision variables
-        V_s[t+1] = V_s[t] + s2hr*(q[t] - value.(u)) # m3, offset by 1 from intial conditions
+        if t == 1
+            V_s[t] = V0 + s2hr*(q[t] - value.(u)) # m3
+        else
+            V_s[t] = V_s[t-1] + s2hr*(q[t] - value.(u)) # m3
+        end
         u_s[t] = value.(u) # m3/s
         ps_s[t] = value.(p_s)
         ph_s[t] = value.(p_h)
@@ -109,7 +96,6 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     total_release = sum(u_s*s2hr)
     
     # Print the final results 
-    @printf("Water Contract: %d m^3 \n", Uw)
     @printf("Simulated Release: %d m^3 \n \n", total_release)
 
     # return optimal control vars (x3), volume state var, total revenue, total release
@@ -169,7 +155,7 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
 
         # ---------- DUAL VALUES -------- # 
         println("Dual Values")
-        println("Water Contract: ", dual.(WaterContract))
+        println("Water Contract: ", -dual.(WaterContract)*s2hr)
     end 
 
     # return optimal control vars, revenue, and total release
@@ -371,12 +357,15 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
     L = 0.0    #minimum(price)
     R = 500.0  #maximum(price)
     theta = (R + L)/2   
-    error = .01
+    error = 1 #.01
     i = 1
     max_iter = 20 
 
     thetas = zeros(Float64, max_iter)
     U_sims = zeros(Float64, max_iter)
+    ut_sim = []
+    ps_sim = []
+    ph_sim = []
 
     while abs(R - L) > error
         @printf("Iteration: %d \n", i)
@@ -399,11 +388,15 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
         thetas[i] = theta
         # store value of objective function 
         U_sims[i] = U_sim
+        # store control decisions 
+        ut_sim = u
+        ps_sim = p_s
+        ph_sim = p_h
 
         # iterate 
         i = i + 1
     end
 
     # return optimal trajectory, optimal DV, and iterations to convergency 
-    return u, p_s, p_h, U_sim, theta, i
+    return ut_sim, ps_sim, ph_sim, U_sims[end], thetas[end]
 end

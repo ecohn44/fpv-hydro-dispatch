@@ -80,7 +80,7 @@ end
 
 function generation_overlay_plots(path, T, p_b, p, type, max)
     # plot baseline
-    plot1 = plot(1:T, p_b, label="Baseline Policy", lw=2, legend = :topright)
+    plot1 = plot(1:T, p_b, label="Baseline Policy", lw=2, legend = :outertopright)
     # plot relaxed
     plot!(1:T, p, label="Relaxed Policy", color =:purple)
     # Add maximum th 

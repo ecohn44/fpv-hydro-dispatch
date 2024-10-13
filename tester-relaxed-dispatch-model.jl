@@ -79,7 +79,7 @@ set_silent(model) # no outputs
 @constraint(model, Release, min_ut <= u <= max_ut)
 @constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
 @constraint(model, RampRateUp, u <= RR_up + u_s[1])
-@constraint(model, SolarCap, p_s <= alpha_s[1]*PS)
+@constraint(model, SolarCap, 1000*p_s <= 1000*alpha_s[1]*PS)
 @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
 # maximize revenue 
@@ -89,7 +89,7 @@ for t = 1:T*N
     # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
     set_normalized_coefficient(Rev, p_s, -L[t])
     set_normalized_coefficient(Rev, p_h, -L[t])
-    set_normalized_rhs(SolarCap, alpha_s[t]*PS)
+    set_normalized_rhs(SolarCap, 1000*alpha_s[t]*PS)
 
     if t == 1 # fix initial condition for ramp rate
         set_normalized_rhs(RampRateUp, min_ut)

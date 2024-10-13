@@ -75,9 +75,9 @@ set_lower_bound.(u, min_ut)
 @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
 @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
-@constraint(model, SolarCap[t in 1:T*N], 0 <= p_s[t] <= alpha_s[t]*PS)
+@constraint(model, SolarCap[t in 1:T*N], 0 <= 1000*p_s[t] <= 1000*alpha_s[t]*PS)
 @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
-#@constraint(model, WaterContract, s2hr*sum(u) == Uw)  
+# @constraint(model, WaterContract, s2hr*sum(u) == Uw)  
 
 # Solve the optimization problem
 optimize!(model)

@@ -43,7 +43,7 @@ months = range(1,1) #12)
 T = 24 # hours (time steps)
 
 # Load in 2022 - 2023 data
-daily, alpha, _ = fullsim_dataload()
+daily, alpha, RTP = fullsim_dataload()
 
 for y in years
 

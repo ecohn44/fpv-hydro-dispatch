@@ -65,9 +65,9 @@ for N in 1:num_days
     ph_s = zeros(Float64, T*N)
 
     # Create the optimization model
-    model = Model(Ipopt.Optimizer)
+    model = Model(Gurobi.Optimizer)
+    #model = Model(Ipopt.Optimizer)
     set_silent(model) # no outputs
-    # model = Model(Gurobi.Optimizer)
 
     # Define variables
     @variable(model, p_h, lower_bound = 0) # Hydro generation
@@ -79,7 +79,8 @@ for N in 1:num_days
     @constraint(model, Rev, R == L[1]*p_s + L[1]*p_h) # - theta*u)
 
     # Constraints
-    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
+    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V0^b))/1e6)*u <= 0 )
+    #@constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
     @constraint(model, Release, min_ut <= u <= max_ut)
     @constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
     @constraint(model, RampRateUp, u <= RR_up + u_s[1])
@@ -98,11 +99,11 @@ for N in 1:num_days
         if t == 1 # fix initial condition for ramp rate
             set_normalized_rhs(RampRateUp, min_ut)
             set_normalized_rhs(RampRateDn, -min_ut)
-            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
+            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
         else
             set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
             set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
-            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
+            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
         end
 
         # Solve the optimization problem
@@ -123,4 +124,4 @@ for N in 1:num_days
     revenue[N] = obj
 end 
 
-CSV.write("relaxed_revenue_wc.csv", DataFrame(Revenue = revenue))
+CSV.write("relaxed_revenue_gurobi.csv", DataFrame(Revenue = revenue))

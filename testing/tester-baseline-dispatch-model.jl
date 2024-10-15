@@ -9,8 +9,6 @@ using Plots
 using Base.Filesystem
 using Ipopt
 using LaTeXStrings
-include("plots.jl")
-include("functions.jl")
 include("dataload.jl")
 
 global s2hr = 3600  # seconds in an hour (delta t)
@@ -57,9 +55,10 @@ for N in 1:num_days
     ## ----------- RUN BASELINE ----------- ##
 
     # Create the optimization model
-    model = Model(Ipopt.Optimizer)
+    model = Model(Gurobi.Optimizer)
+    #model = Model(Ipopt.Optimizer)
     set_silent(model) 
-    # model = Model(Gurobi.Optimizer)
+    
 
     # Define variables
     @variable(model, V[1:T*N])
@@ -79,7 +78,8 @@ for N in 1:num_days
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
+    #@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= 1000*p_s[t] <= 1000*alpha_s[t]*PS)
@@ -95,4 +95,4 @@ for N in 1:num_days
     revenue[N] = obj
 end
 
-CSV.write("baseline_revenue_wc.csv", DataFrame(Revenue = revenue))
+CSV.write("baseline_revenue_gurobi.csv", DataFrame(Revenue = revenue))

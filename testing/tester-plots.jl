@@ -3,8 +3,8 @@ using DataFrames
 using Plots
 
 # Load the two CSV files
-relaxed_revenue = CSV.read("relaxed_revenue.csv", DataFrame)
-baseline_revenue = CSV.read("baseline_revenue.csv", DataFrame)
+relaxed_revenue = CSV.read("relaxed_revenue_gurobi.csv", DataFrame)
+baseline_revenue = CSV.read("baseline_revenue_gurobi.csv", DataFrame)
 
 # Extract the columns (assuming each file has one column)
 relaxed_values = relaxed_revenue[:, 1]  # First column

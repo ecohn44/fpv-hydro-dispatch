@@ -10,6 +10,7 @@ using Base.Filesystem
 using Ipopt
 using LaTeXStrings
 include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/dataload.jl")
+include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/functions.jl")
 
 global s2hr = 3600  # seconds in an hour (delta t)
 global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
@@ -40,86 +41,84 @@ daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
 RTP_s = filter(row -> row[:Year] == "20"*y && row[:Month] == string(m), RTP)
 
 V0 = daily_s.storage[1] # initial storage conditions
-min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels 
 revenue = zeros(Float64, num_days) # revenue for each horizon length 
-theta = 131
+theta = 131.5
 
-for N in 1:num_days
-    Uw = sum(daily_s.release[1:N]) # monthly water contract
-    L = repeat([RTP_s.MW[1]], T*N) # keep price constant for each time step
-    q = dailyflow_to_hourly(daily_s.inflow[1:N], T) # inflow
-    alpha_s = repeat(alpha[:,m], N) # solar radiation 
+# for N in 1:num_days
+N = 31 
+
+Uw = sum(daily_s.release[1:N]) # monthly water contract
+# L = repeat([RTP_s.MW[1]], T*N) # keep price constant for each time step
+price = RTP_s.MW[1:T*N]
+q = dailyflow_to_hourly(daily_s.inflow[1:N], T) # inflow
+alpha_s = repeat(alpha[:,m], N) # solar radiation 
 
 
-    ## ----------- RUN RELAXED ----------- ##
-    # Create the optimization model
-    model = Model(Ipopt.Optimizer)
-    set_silent(model) 
+## ----------- RUN RELAXED ----------- ##
 
-    # Initialize empty vectors to store mass balance and control vars
-    V_s = zeros(Float64, T*N) # Reservoir volume
-    u_s = zeros(Float64, T*N)
-    ps_s = zeros(Float64, T*N)
-    ph_s = zeros(Float64, T*N)
+# Initialize empty vectors to store mass balance and control vars
+V_s = zeros(Float64, T*N) # Reservoir volume
+u_s = zeros(Float64, T*N)
+ps_s = zeros(Float64, T*N)
+ph_s = zeros(Float64, T*N)
 
-    # Create the optimization model
-    model = Model(Gurobi.Optimizer)
-    #model = Model(Ipopt.Optimizer)
-    set_silent(model) # no outputs
+# Create the optimization model
+model = Model(Gurobi.Optimizer)
+set_silent(model) # no outputs
 
-    # Define variables
-    @variable(model, p_h, lower_bound = 0) # Hydro generation
-    @variable(model, p_s, lower_bound = 0) # Solar generation
-    @variable(model, u) # Water release 
-    @variable(model, R) # Revenue
+# Define variables
+@variable(model, p_h, lower_bound = 0) # Hydro generation
+@variable(model, p_s, lower_bound = 0) # Solar generation
+@variable(model, u) # Water release 
+@variable(model, R) # Revenue
 
-    # Objective Function
-    @constraint(model, Rev, R == L[1]*p_s + L[1]*p_h) # - theta*u)
+# Objective Function
+@constraint(model, Rev, R == price[1]*p_s + price[1]*p_h - theta*u)
 
-    # Constraints
-    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V0^b))/1e6)*u <= 0 )
-    #@constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
-    @constraint(model, Release, min_ut <= u <= max_ut)
-    @constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
-    @constraint(model, RampRateUp, u <= RR_up + u_s[1])
-    @constraint(model, SolarCap, 1000*p_s <= 1000*alpha_s[1]*PS)
-    @constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
+# Constraints
+@constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V0^b))/1e6)*u <= 0 )
+@constraint(model, Release, min_ut <= u <= max_ut)
+@constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
+@constraint(model, RampRateUp, u <= RR_up + u_s[1])
+@constraint(model, SolarCap, 1000*p_s <= 1000*alpha_s[1]*PS)
+@constraint(model, FeederCap, 0 <= p_s + p_h <= PF)
 
-    # maximize revenue 
-    @objective(model, Max, R)
+# maximize revenue 
+@objective(model, Max, R)
 
-    for t = 1:T*N
-        # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
-        set_normalized_coefficient(Rev, p_s, -L[t])
-        set_normalized_coefficient(Rev, p_h, -L[t])
-        set_normalized_rhs(SolarCap, 1000*alpha_s[t]*PS)
+for t = 1:T*N
+    # Update electricity price coefficients (note sign flip; s_n_c moves terms to one side)
+    set_normalized_coefficient(Rev, p_s, -price[t])
+    set_normalized_coefficient(Rev, p_h, -price[t])
+    set_normalized_rhs(SolarCap, 1000*alpha_s[t]*PS)
 
-        if t == 1 # fix initial condition for ramp rate
-            set_normalized_rhs(RampRateUp, min_ut)
-            set_normalized_rhs(RampRateDn, -min_ut)
-            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
-        else
-            set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
-            set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
-            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
-        end
-
-        # Solve the optimization problem
-        optimize!(model)
-
-        # Update mass balance + decision variables
-        if t == 1
-            V_s[t] = V0 + s2hr*(q[t] - value.(u)) # m3
-        else
-            V_s[t] = V_s[t-1] + s2hr*(q[t] - value.(u)) # m3
-        end
-        u_s[t] = value.(u) # m3/s
-        ps_s[t] = value.(p_s)
-        ph_s[t] = value.(p_h)
+    if t == 1 # fix initial condition for ramp rate
+        set_normalized_rhs(RampRateUp, min_ut)
+        set_normalized_rhs(RampRateDn, -min_ut)
+        #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
+    else
+        set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
+        set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
+        #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
     end
 
-    obj = sum(L.*(ps_s + ph_s));
-    revenue[N] = obj
-end 
+    # Solve the optimization problem
+    optimize!(model)
 
-CSV.write("testing/relaxed_revenue_gurobi.csv", DataFrame(Revenue = revenue))
+    # Update mass balance + decision variables
+    if t == 1
+        V_s[t] = V0 + s2hr*(q[t] - value.(u)) # m3
+    else
+        V_s[t] = V_s[t-1] + s2hr*(q[t] - value.(u)) # m3
+    end
+    u_s[t] = value.(u) # m3/s
+    ps_s[t] = value.(p_s)
+    ph_s[t] = value.(p_h)
+end
+
+obj = sum(price.*(ps_s + ph_s));
+revenue[N] = obj
+    
+#end 
+
+# CSV.write("testing/relaxed_revenue_gurobi_wc.csv", DataFrame(Revenue = revenue))

@@ -27,9 +27,9 @@ global g = 9.8      # acceleration due to gravity [m/s^2]
 global a = 15;      # hydraulic head parameter 1 
 global b = 0.13;    # hydraulic head parameter 2 
 
-monthly_overlayplots = true;
+monthly_overlayplots = false;
 weeklyplots = false;
-make_path = true;
+make_path = false;
 
 # -----------------  DATA LOAD  ----------------- #
 println("--- SIMULATION BEGIN ---")
@@ -44,8 +44,8 @@ T = 24 # hours (time steps)
 daily, alpha, RTP = fullsim_dataload();
 daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
 RTP_s = filter(row -> row[:Year] == "20"*y && row[:Month] == string(m), RTP)
-alpha_s = repeat(alpha[:,m], N)
 N = nrow(daily_s) # number of days in the month 
+alpha_s = repeat(alpha[:,m], N)
 
 ##  OPTIMIZATION SETUP  
 V0 = daily_s.storage[1] # initial storage conditions
@@ -59,9 +59,7 @@ price = RTP_s.MW # price
 u_b, ps_b, ph_b, f0_b, U_sim_b = run_sim(T, N, price, q, alpha_s, Uw, V0)
 
 # Run partially relaxed formulation
-u, p_s, p_h, U_sim, theta = bst_sim(T, N, price, q, alpha_s, V0, Uw)
-# run one more time with optimal theta
-# u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta)
+u, p_s, p_h, theta = bst_sim(T, N, price, q, alpha_s, V0, Uw)
 
 ## MONTHLY SUMMARY
 @printf("Summary for Month: %d \n", m)
@@ -69,7 +67,7 @@ u, p_s, p_h, U_sim, theta = bst_sim(T, N, price, q, alpha_s, V0, Uw)
 @printf("Relaxed Policy Revenue: \$ %d \n", sum(price.*(p_s + p_h)))
 @printf("Water Contract: %d m3 \n", Uw)
 @printf("Water Release (Baseline): %d m3 \n", U_sim_b)
-@printf("Water Release (Relaxed): %d m3 \n", U_sim)
+@printf("Water Release (Relaxed): %d m3 \n", sum(u)*s2hr)
 @printf("Dual Value: %d \n", theta)
 
 # ---------- PLOTS -------- #

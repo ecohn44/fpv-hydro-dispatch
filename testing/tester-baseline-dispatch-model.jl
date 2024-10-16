@@ -9,7 +9,7 @@ using Plots
 using Base.Filesystem
 using Ipopt
 using LaTeXStrings
-include("dataload.jl")
+include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/dataload.jl")
 
 global s2hr = 3600  # seconds in an hour (delta t)
 global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
@@ -95,4 +95,4 @@ for N in 1:num_days
     revenue[N] = obj
 end
 
-CSV.write("baseline_revenue_gurobi.csv", DataFrame(Revenue = revenue))
+CSV.write("testing/baseline_revenue_gurobi.csv", DataFrame(Revenue = revenue))

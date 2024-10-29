@@ -10,6 +10,7 @@ using Base.Filesystem
 using Ipopt
 using LaTeXStrings
 using Statistics
+using XLSX
 include("plots.jl")
 include("functions.jl")
 include("dataload.jl")
@@ -54,7 +55,8 @@ daily, alpha, RTP = fullsim_dataload();
 DVs = zeros(Float64, num_m, num_y, num_f) 
 revenue = zeros(Float64, num_m, num_y, num_f)
 release = zeros(Float64, num_m, num_y, num_f)
-column_headers = []
+output_headers = []
+input_headers = ["2022 LMP", "2023 LMP", "2022 WC", "2023 WC", "2022 Inflow", "2023 Inflow"]
 
 # Simulation Inputs
 avg_LMP = zeros(Float64, num_m, num_y)
@@ -68,7 +70,7 @@ for f in feeder
     for y in years
         y_ind = findfirst(==(y), years)
         label = "20"*y*" PF"*string(f)
-        push!(column_headers, label)
+        push!(output_headers, label)
 
         for m in months
 
@@ -115,15 +117,20 @@ end
 ## OUTPUT DATA
 # save theta for 2022, 2023, PF
 flat_DVs = reshape(DVs, size(DVs, 1), size(DVs, 2) * size(DVs, 3))
-DV_df = DataFrame(flat_DVs, Symbol.(column_headers))
-CSV.write("output/DVs.csv", df)
+DV_df = DataFrame(flat_DVs, Symbol.(output_headers))
+CSV.write("output/DVs.csv", DV_df)
 
 # save revenue for 2022, 2023, PF
+flat_rev = reshape(revenue, size(revenue, 1), size(revenue, 2) * size(revenue, 3))
+rev_df = DataFrame(flat_DVs, Symbol.(output_headers))
+CSV.write("output/rev.csv", rev_df)
 
 ## INPUT DATA
-# save LMP for 2022, 2023
-# save inflow 2022, 2023
-# save outflow (wc) for 2022, 2023
+# save LMP, inflow, outflow for 2022, 2023
+combined_data = hcat(avg_LMP, water_contract, total_inflow)
+input_df = DataFrame(combined_data, Symbol.(input_headers))
+CSV.write("output/input.csv", input_df)
+
 
 # ---------- SUMMARY -------- #
 if print

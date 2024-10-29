@@ -186,3 +186,28 @@ function hhead_plots(path, T, hh, hh_d)
     savefig(plot2, path * "/hh_d.png");
 
 end
+
+function netflow_plot()
+    mode1 = 837620904/1e6
+    mode2 = 1889976499/1e6
+    delta1 = mode1 - 0.05*mode1
+    delta2 = mode1 + 0.05*mode1
+
+    net = water_contract - total_inflow
+    plot(net/1e6, label = "Netflow")
+    hline!([mode1], color=:red, linestyle=:dash, label="Max Release")
+    hline!([delta1], color=:red, linestyle=:dash, label="+5% Max Release")
+    hline!([delta2], color=:red, linestyle=:dash, label="-5% Max Release")
+    title!("System Net Flow")
+    xaxis!("Month")
+    yaxis!("Volume (Million m3)")
+end
+
+function inflow_plot()
+    #plot(total_inflow/1e6, label = "Inflow")
+    plot(water_contract/1e6, label = "Water Contract (Outflow)")
+    hline!([max_release/1e6], color=:red, linestyle=:dash, label="Max Release")
+    title!("Total Monthly Water Contract Vs Inflow")
+    xaxis!("Month")
+    yaxis!("Volume (Million m3)")
+end

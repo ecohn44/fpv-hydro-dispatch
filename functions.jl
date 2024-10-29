@@ -28,6 +28,7 @@ function dailyflow_to_hourly(q, T)
     return hourly_q
 end
 
+# decomposed
 function run_sim_partialL(T, N, L, q, alpha, V0, theta)
 
     print = false; 
@@ -40,6 +41,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
 
     # Create the optimization model
     model = Model(Gurobi.Optimizer)
+    # model = Model(Ipopt.Optimizer)
     set_silent(model) # no outputs
 
     # Define variables
@@ -52,8 +54,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     @constraint(model, Rev, R == L[1]*p_s + L[1]*p_h - theta*u)
 
     # Constraints
-    # @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
-    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V0^b))/1e6)*u <= 0 )
+    @constraint(model, ReleaseEnergy, p_h - ((eta * g * rho_w * a * (V_s[1]^b))/1e6)*u <= 0 )
     @constraint(model, Release, min_ut <= u <= max_ut)
     @constraint(model, RampRateDn, -u <= -(RR_dn + u_s[1]))
     @constraint(model, RampRateUp, u <= RR_up + u_s[1])
@@ -72,11 +73,11 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
         if t == 1 # fix initial condition for ramp rate
             set_normalized_rhs(RampRateUp, min_ut)
             set_normalized_rhs(RampRateDn, -min_ut)
-            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
+            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V0^b))/1e6))
         else
             set_normalized_rhs(RampRateUp, RR_up + u_s[t-1])
             set_normalized_rhs(RampRateDn, -(RR_dn + u_s[t-1]))
-            #set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
+            set_normalized_coefficient(ReleaseEnergy, u, -((eta * g * rho_w * a * (V_s[t-1]^b))/1e6))
         end
 
         # Solve the optimization problem
@@ -96,17 +97,19 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
     total_release = sum(u_s*s2hr)
     
     # Print the final results 
-    @printf("Simulated Release: %d m^3 \n \n", total_release)
+    if print
+        @printf("Simulated Release: %d m^3 \n \n", total_release)
+    end 
 
     # return optimal control vars (x3), volume state var, total revenue, total release
-    return u_s, ps_s, ph_s, V_s, total_release
+    return u_s, ps_s, ph_s, total_release
     
 end
 
 # baseline
 function run_sim(T, N, L, q, alpha, Uw, V0)
 
-    print = true; 
+    print = false; 
 
     # Create the optimization model
     model = Model(Gurobi.Optimizer)
@@ -130,8 +133,7 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
 
     # Constraints
     @constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-    #@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
-    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
+    @constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
     @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
     @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
     @constraint(model, SolarCap[t in 1:T*N], 0 <= 1000*p_s[t] <= 1000*alpha[t]*PS)
@@ -164,9 +166,11 @@ function run_sim(T, N, L, q, alpha, Uw, V0)
 end
 
 function bst_sim(T, N, price, q, alpha_s, V0, Uw)
+    print = false; 
+
     # Search bounds for DV
-    L = 0.0    #minimum(price)
-    R = 500.0  #maximum(price)
+    L = 0    #minimum(price)
+    R = 1200 #maximum(price)
     theta = (R + L)/2   
     error = 1 #.01
     i = 1
@@ -176,14 +180,16 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
     ph_sim = []
 
     while abs(R - L) > error
-        @printf("Iteration: %d \n", i)
-        @printf("Upper Bound: %d \n", R)
-        @printf("Lower Bound: %d \n", L)
-        @printf("Theta: %d \n", theta)
+        if print
+            @printf("Iteration: %d \n", i)
+            @printf("Upper Bound: %d \n", R)
+            @printf("Lower Bound: %d \n", L)
+            @printf("Theta: %d \n", theta)
+        end
 
         theta = (R + L)/2 
 
-        u, p_s, p_h, V, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta);
+        u, p_s, p_h, U_sim = run_sim_partialL(T, N, price, q, alpha_s, V0, theta);
 
         if U_sim > Uw # need to increase penalty to release less water, raise lower bounds
             L = theta

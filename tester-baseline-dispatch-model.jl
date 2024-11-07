@@ -9,6 +9,7 @@ using Plots
 using Base.Filesystem
 using Ipopt
 using LaTeXStrings
+using BenchmarkTools
 include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/dataload.jl")
 
 global s2hr = 3600  # seconds in an hour (delta t)
@@ -16,14 +17,22 @@ global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
 global RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 global RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-global PF = 1200   # max feeder capacity [MW] (3.3 GW) 
+global PF = 1300   # max feeder capacity [MW] (3.3 GW) 
 global PS = 1000   # max solar field capacity [MW] (1 GW) 
 global SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
-global eta = .9     # efficiency of release-energy conversion
+global eta = .775     # efficiency of release-energy conversion
 global rho_w = 1000 # density of water [kg/m^3]
 global g = 9.8      # acceleration due to gravity [m/s^2]
-global a = 15;      # hydraulic head parameter 1 
-global b = 0.13;    # hydraulic head parameter 2 
+global a = 14.9837;      # hydraulic head parameter 1 
+global b = 0.1321;     # hydraulic head parameter 2 
+
+# -----------------  TIMING ----------------- #
+obj = 0;
+U_sim = 0;
+DV = 0;
+
+result = @benchmark begin
+# elapsed_time = @elapsed begin
 
 # -----------------  DATA LOAD  ----------------- #
 
@@ -32,20 +41,14 @@ global b = 0.13;    # hydraulic head parameter 2
 y = "22"
 m = 1
 T = 24 
-num_days = 31
-N = 1
+N = 7
 
 # Load in 2022 - 2023 data
 daily, alpha, RTP = fullsim_dataload();
 daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
-RTP_s = filter(row -> row[:Year] == "20"*y && row[:Month] == string(m), RTP)
+RTP_s = filter(row -> row[:Year] == y && row[:Month] == string(m), RTP)
 
 V0 = daily_s.storage[1] # initial storage conditions for month 
-revenue = zeros(Float64, num_days) # revenue for each horizon length 
-
-#for N in 1:num_days
-N = num_days
-
 min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels 
 Uw = sum(daily_s.release[1:N]) # monthly water contract
 # L = repeat([RTP_s.MW[1]], T*N) # keep price constant for each time step
@@ -88,10 +91,21 @@ set_lower_bound.(u, min_ut)
 # Solve the optimization problem
 optimize!(model)
 
+# Revenue
 obj = objective_value(model);
-#print(obj)  
 
-#revenue[N] = obj
-#end
+# Total Water Release
+U_sim = sum(value.(u))*s2hr
 
-#CSV.write("testing/baseline_revenue_gurobi_wc.csv", DataFrame(Revenue = revenue))
+# Dual value of water contract
+DV = -dual(WaterContract)*s2hr
+
+# Water Contract
+#println(Uw)
+
+end 
+#println("Elapsed time: $elapsed_time s")
+
+# Computation Time
+println("Median time in ms: $(median(result.times) / 1_000_000) ms")
+

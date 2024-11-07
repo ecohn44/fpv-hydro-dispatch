@@ -56,7 +56,7 @@ ylabel('Price of Water ($/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex')
 
 yyaxis right;
 plot(LMP, 'DisplayName', 'Price of Electricity', 'LineWidth', 1.5);
-ylabel('Price of Electricity ($/MWh)','FontSize', labelFontSize);
+ylabel('Price of Electricity $/MW','FontSize', labelFontSize);
 
 % Add labels and legend
 xlabel('Month', 'FontSize', labelFontSize);
@@ -71,10 +71,10 @@ saveas(gcf,'figures/waterprice_over_LMP.png')
 figure('Units', 'inches', 'Position', [1, 1, 6, 4]); 
 yyaxis left;
 plot(DV34, 'DisplayName', 'Price of Water', 'LineWidth', 1.5);
-ylabel('Price of Water ($/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex');
+ylabel('Price of Water','FontSize', labelFontSize, 'Interpreter', 'tex');
 
 yyaxis right;
-plot(netflow, 'DisplayName', 'Netflow', 'LineWidth', 1.5);
+plot(netflow, 'DisplayName', 'Netflow (Mm3)', 'LineWidth', 1.5);
 ylabel('Netflow (10^6 m^3)','FontSize', labelFontSize, 'Interpreter', 'tex');
 
 % Add labels and legend

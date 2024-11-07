@@ -41,7 +41,7 @@ function run_sim_partialL(T, N, L, q, alpha, V0, theta)
 
     # Create the optimization model
     model = Model(Gurobi.Optimizer)
-    # model = Model(Ipopt.Optimizer)
+    #model = Model(Ipopt.Optimizer)
     set_silent(model) # no outputs
 
     # Define variables
@@ -172,7 +172,7 @@ function bst_sim(T, N, price, q, alpha_s, V0, Uw)
     L = 0    #minimum(price)
     R = 1200 #maximum(price)
     theta = (R + L)/2   
-    error = 1 #.01
+    error = .01
     i = 1
 
     ut_sim = []

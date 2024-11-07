@@ -20,14 +20,13 @@ global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
 global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
 global RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
 global RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
-# global PF        # max feeder capacity [MW] (nameplate 3.3 GW) 
-global PS = 1000   # max solar field capacity [MW] (1 GW) 
-global SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
-global eta = .9     # efficiency of release-energy conversion
+# global PF        # max feeder capacity [MW] (nameplate 3.4 GW) 
+global PS = 1000   # max solar field capacity [MW]  
+global eta = .775     # efficiency of release-energy conversion
 global rho_w = 1000 # density of water [kg/m^3]
 global g = 9.8      # acceleration due to gravity [m/s^2]
-global a = 15;      # hydraulic head parameter 1 
-global b = 0.13;    # hydraulic head parameter 2 
+global a = 14.9837;      # hydraulic head parameter 1 
+global b = 0.1321;    # hydraulic head parameter 2 
 
 monthly_overlayplots = false;
 weeklyplots = false;
@@ -39,7 +38,7 @@ DV_plot = false;
 # -----------------  DATA LOAD  ----------------- #
 println("--- SIMULATION BEGIN ---")
 
-feeder = [1000, 2000, 3000, 4000]
+feeder = [500, 1000, 1300, 2000, 3000, 4000]
 years = ["22", "23"]
 months = range(1, 12)
 num_m = length(months)
@@ -65,7 +64,7 @@ total_inflow = zeros(Float64, num_m, num_y)
 
 for f in feeder
     global PF = f
-    pf_ind = Integer(f/1000)
+    pf_ind = findfirst(x -> x == f, feeder)
 
     for y in years
         y_ind = findfirst(==(y), years)
@@ -122,7 +121,7 @@ CSV.write("output/DVs.csv", DV_df)
 
 # save revenue for 2022, 2023, PF
 flat_rev = reshape(revenue, size(revenue, 1), size(revenue, 2) * size(revenue, 3))
-rev_df = DataFrame(flat_DVs, Symbol.(output_headers))
+rev_df = DataFrame(flat_rev, Symbol.(output_headers))
 CSV.write("output/rev.csv", rev_df)
 
 ## INPUT DATA
@@ -213,3 +212,4 @@ if weeklyplots
 end
 
 println("--- SIMULATION END ---")
+

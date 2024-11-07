@@ -32,9 +32,9 @@ plot(x_fit/10e9, y_fit, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Best Fit'); % R
 hold off;
 
 % Add labels and legend
-xlabel('Volume (10^9 m^3)', 'FontSize', labelFontSize, 'Interpreter', 'tex');
-ylabel('Height (m)','FontSize', labelFontSize);
-legend('FontSize', legendFontSize, 'Location', 'northwest');
+xlabel('Volume (10^9 m^3)', 'FontSize', labelFontSize, 'Interpreter', 'tex','FontName', 'Times New Roman');
+ylabel('Height (m)','FontSize', labelFontSize,'FontName', 'Times New Roman');
+legend('FontSize', legendFontSize, 'Location', 'northwest','FontName', 'Times New Roman');
 set(gca, 'FontSize', axisFontSize)
 grid on;
 saveas(gcf,'figures/hh_fit.png')

@@ -14,7 +14,6 @@ include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/dataload.jl")
 include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/functions.jl")
 
 #result = @benchmark begin
-# elapsed_time = @elapsed begin
 
 global s2hr = 3600  # seconds in an hour (delta t)
 global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
@@ -91,6 +90,8 @@ end
 ## SIMULATION RESULTS FOR TUNED THETA
 # Total Revenue 
 println(revenue)
+println(sum(price.*ps_t))
+println(sum(price.*ph_t))
 
 # Price of Water
 println(thetas)
@@ -105,10 +106,9 @@ println(Uw)
 
 # Computation Time
 #println("Median time in ms: $(median(result.times) / 1_000_000) ms")
-#println("Elapsed time: $elapsed_time s")
 
 # Download PS, PH, UT
 combined_data = hcat(ps_t, ph_t, u_t)
 df = DataFrame(combined_data, :auto)
-CSV.write("output/weekly_behavior.csv", df)
+CSV.write("output/relaxed_weekly_behavior.csv", df)
 

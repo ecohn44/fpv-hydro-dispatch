@@ -38,3 +38,4 @@ legend('FontSize', legendFontSize, 'Location', 'northwest','FontName', 'Times Ne
 set(gca, 'FontSize', axisFontSize)
 grid on;
 saveas(gcf,'figures/hh_fit.png')
+savefig("figures/hh_fit.fig")

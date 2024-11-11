@@ -31,8 +31,7 @@ obj = 0;
 U_sim = 0;
 DV = 0;
 
-result = @benchmark begin
-# elapsed_time = @elapsed begin
+#result = @benchmark begin
 
 # -----------------  DATA LOAD  ----------------- #
 
@@ -103,9 +102,22 @@ DV = -dual(WaterContract)*s2hr
 # Water Contract
 #println(Uw)
 
-end 
-#println("Elapsed time: $elapsed_time s")
+#end 
 
 # Computation Time
-println("Median time in ms: $(median(result.times) / 1_000_000) ms")
+# println("Median time in ms: $(median(result.times) / 1_000_000) ms")
+
+ps_t = value.(p_s)
+ph_t = value.(p_h)
+u_t = value.(u)
+
+# Print out revenue 
+println(sum(L.*(ph_t + ps_t)))
+println(sum(L.*ps_t))
+println(sum(L.*ph_t))
+
+# Download PS, PH, UT
+combined_data = hcat(ps_t, ph_t, u_t)
+df = DataFrame(combined_data, :auto)
+CSV.write("output/baseline_weekly_behavior.csv", df)
 

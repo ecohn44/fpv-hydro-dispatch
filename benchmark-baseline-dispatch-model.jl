@@ -13,10 +13,10 @@ using BenchmarkTools
 include("/Users/elizacohn/Desktop/fpv-hydro-dispatch/dataload.jl")
 
 global s2hr = 3600  # seconds in an hour (delta t)
-global min_ut = cfs_to_m3s(5000)    # min daily release limit [m3/s]
-global max_ut = cfs_to_m3s(25000)   # max daily release limit [m3/s] 
-global RR_dn = cfs_to_m3s(-2500) # down ramp rate limit [m3/s]
-global RR_up = cfs_to_m3s(4000)  # up ramp rate limit [m3/s]
+global min_ut = s2hr*cfs_to_m3s(5000)    # min daily release limit [m3/s] to [m3/hr] 
+global max_ut = s2hr*cfs_to_m3s(25000)   # max daily release limit [m3/s] to [m3/hr] 
+global RR_dn = s2hr*cfs_to_m3s(-2500) # down ramp rate limit [m3/s] to [m3/hr] 
+global RR_up = s2hr*cfs_to_m3s(4000)  # up ramp rate limit [m3/s] to [m3/hr] 
 global PF = 1300   # max feeder capacity [MW] (3.3 GW) 
 global PS = 1000   # max solar field capacity [MW] (1 GW) 
 global SA = 1.3e9   # surface area of both reservoirs [m^2] (504 sq miles)
@@ -31,7 +31,7 @@ obj = 0;
 U_sim = 0;
 DV = 0;
 
-#result = @benchmark begin
+# result = @benchmark begin
 
 # -----------------  DATA LOAD  ----------------- #
 
@@ -48,10 +48,9 @@ daily_s = filter(row -> row[:year] == y && parse(Int, row[:month]) == m, daily)
 RTP_s = filter(row -> row[:Year] == y && row[:Month] == string(m), RTP)
 
 V0 = daily_s.storage[1] # initial storage conditions for month 
-min_Vt = V0 - T*N*s2hr*max_ut # min reservoir levels 
+min_Vt = V0 - T*N*max_ut # min reservoir levels 
 Uw = sum(daily_s.release[1:N]) # monthly water contract
-# L = repeat([RTP_s.MW[1]], T*N) # keep price constant for each time step
-L = RTP_s.MW[1:T*N] # time varying
+price = RTP_s.MW[1:T*N] # time varying
 q = dailyflow_to_hourly(daily_s.inflow[1:N], T) # inflow
 alpha_s = repeat(alpha[:,m], N) # solar radiation 
 
@@ -59,6 +58,7 @@ alpha_s = repeat(alpha[:,m], N) # solar radiation
 
 # Create the optimization model
 model = Model(Gurobi.Optimizer)
+#model = Model(Ipopt.Optimizer)
 set_silent(model) 
 
 # Define variables
@@ -75,49 +75,39 @@ set_lower_bound.(u, min_ut)
 @constraint(model, RampRateInit, u[1] == min_ut)
 
 # Objective function
-@objective(model, Max, sum(L .* (p_h + p_s)))
+@objective(model, Max, sum(price .* (p_h + p_s)))
 
 # Constraints
-@constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + s2hr*(q[t] - u[t]))
-@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/1e6)
-#@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/1e6)
+@constraint(model, MassBal[t in 2:T*N], V[t] == V[t-1] + (q[t] - u[t]))
+@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V0^b))/3.6e9)
+#@constraint(model, ReleaseEnergy[t in 1:T*N], p_h[t] <= (eta * g * rho_w * u[t] * a * (V[t]^b))/(3.6e9))
 @constraint(model, Release[t in 2:T*N], min_ut <= u[t] <= max_ut)
 @constraint(model, RampRate[t in 2:T*N], RR_dn <= u[t] - u[t-1] <= RR_up)
 @constraint(model, SolarCap[t in 1:T*N], 0 <= 1000*p_s[t] <= 1000*alpha_s[t]*PS)
 @constraint(model, FeederCap[t in 1:T*N], 0 <= p_s[t] + p_h[t] <= PF)
-@constraint(model, WaterContract, s2hr*sum(u) == Uw)  
+@constraint(model, WaterContract, sum(u) == Uw)  
 
 # Solve the optimization problem
 optimize!(model)
 
 # Revenue
 obj = objective_value(model);
+println(obj)
 
 # Total Water Release
-U_sim = sum(value.(u))*s2hr
-
-# Dual value of water contract
-DV = -dual(WaterContract)*s2hr
+U_sim = sum(value.(u));
+println(U_sim)
 
 # Water Contract
 #println(Uw)
 
-#end 
+# end 
 
 # Computation Time
 # println("Median time in ms: $(median(result.times) / 1_000_000) ms")
 
-ps_t = value.(p_s)
-ph_t = value.(p_h)
-u_t = value.(u)
-
-# Print out revenue 
-println(sum(L.*(ph_t + ps_t)))
-println(sum(L.*ps_t))
-println(sum(L.*ph_t))
-
 # Download PS, PH, UT
-combined_data = hcat(ps_t, ph_t, u_t)
-df = DataFrame(combined_data, :auto)
-CSV.write("output/baseline_weekly_behavior.csv", df)
+#combined_data = hcat(ps_t, ph_t, u_t)
+#df = DataFrame(combined_data, :auto)
+#CSV.write("output/baseline_weekly_behavior.csv", df)
 

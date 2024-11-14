@@ -12,9 +12,9 @@ titleFontSize = 16;  % Font size for title
 %% FIG 1: DUAL VALUE SENSITIVITY ANALYSIS PLOT %%
 
 % Load data
-DVs = table2array(readtable('DVs.csv'));
-input = table2array(readtable('input.csv'));
-rev = table2array(readtable('rev.csv'))/10e6; 
+DVs = 100*table2array(readtable('fastDVs.csv')); %convert to cents
+input = table2array(readtable('fastinput.csv'));
+rev = table2array(readtable('fastrev.csv'))/10e6; 
 % Concatenate 2022 and 2023 together
 DV5 = [DVs(:, 1); DVs(:, 2)];
 DV1 = [DVs(:, 3); DVs(:, 4)];
@@ -41,21 +41,21 @@ hold off;
 
 % Add labels and legend
 xlabel('Month','FontSize', labelFontSize,'FontName', 'Times New Roman');
-ylabel('Price of Water ($/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex','FontName', 'Times New Roman');
+ylabel('Price of Water (¢/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex','FontName', 'Times New Roman');
 xlim([0,24]);
 xticks(0:3:24);
 % title('2022-2023 Marginal Price of Water for Varying Feeder Capacity (FC)', 'FontSize', titleFontSize);
 legend('FontSize', legendFontSize, 'Location', 'northeast','FontName', 'Times New Roman');
 set(gca, 'FontSize', axisFontSize)
 grid on;
-saveas(gcf,'figures/waterprice_over_FC.png')
-savefig("figures/waterprice_over_FC.fig")
+%saveas(gcf,'figures/fastwaterprice_over_FC.png')
+savefig("figures/fastwaterprice_over_FC.fig")
 
 %% FIG 2: DUAL VALUE OVER LMP FOR FC = 1300 GW
 figure('Units', 'inches', 'Position', [1, 1, 6, 4]);
 yyaxis left;
 plot(DV13, 'DisplayName', 'Price of Water', 'LineWidth', 1.5);
-ylabel('Price of Water ($/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex','FontName', 'Times New Roman');
+ylabel('Price of Water (¢/m^3)','FontSize', labelFontSize, 'Interpreter', 'tex','FontName', 'Times New Roman');
 
 yyaxis right;
 plot(LMP, 'DisplayName', 'Price of Electricity', 'LineWidth', 1.5);
@@ -77,8 +77,8 @@ set(ax.YAxis(2), 'Color', 'k'); % Set the right y-axis ticks and labels to black
 r = corr(LMP, DV13); 
 disp(r);
 
-saveas(gcf,'figures/waterprice_over_LMP.png')
-savefig("figures/waterprice_over_LMP.fig")
+%saveas(gcf,'figures/fastwaterprice_over_LMP.png')
+savefig("figures/fastwaterprice_over_LMP.fig")
 
 %% FIG 3: Revenue over Feeder Capacity 
 % Concatenate 2022 and 2023 together
@@ -109,8 +109,8 @@ xticks(0:3:24);
 legend('FontSize', legendFontSize, 'Location', 'northeast','FontName', 'Times New Roman');
 set(gca, 'FontSize', axisFontSize)
 grid on;
-saveas(gcf,'figures/revenue_over_FC.png')
-savefig("figures/revenue_over_FC.fig")
+%saveas(gcf,'figures/fastrevenue_over_FC.png')
+savefig("figures/fastrevenue_over_FC.fig")
 
 
 
@@ -124,7 +124,7 @@ savefig("figures/revenue_over_FC.fig")
 
 
 
-
+%{
 %% DECOMM: DUAL VALUE OVER NETFLOW FOR FC = 1300 GW
 figure('Units', 'inches', 'Position', [1, 1, 6, 4]); 
 yyaxis left;
@@ -144,3 +144,4 @@ legend('FontSize', legendFontSize-2.5, 'Location', 'northeast','FontName', 'Time
 set(gca, 'FontSize', axisFontSize)
 grid on;
 saveas(gcf,'figures/waterprice_over_netflow.png')
+%}

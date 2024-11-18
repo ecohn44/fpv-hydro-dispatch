@@ -14,7 +14,13 @@ titleFontSize = 16;  % Font size for title
 % Load data
 DVs = 100*table2array(readtable('fastDVs.csv')); %convert to cents
 input = table2array(readtable('fastinput.csv'));
-rev = table2array(readtable('fastrev.csv'))/10e6; 
+rev = table2array(readtable('fastrev.csv'))/10e6; %convert to M$
+gen = table2array(readtable('fastgen.csv'));
+s = gen(:,1);
+h = gen(:,2);
+combo = s + h;
+
+
 % Concatenate 2022 and 2023 together
 DV5 = [DVs(:, 1); DVs(:, 2)];
 DV1 = [DVs(:, 3); DVs(:, 4)];
@@ -27,6 +33,7 @@ LMP = [input(:, 1); input(:, 2)];
 outflow = [input(:, 3); input(:, 4)];
 inflow = [input(:, 5); input(:, 6)];
 netflow = (outflow - inflow)/10e6;
+
 
 % Create plot
 % Create Figure with Specified Size (in inches)
@@ -80,6 +87,7 @@ disp(r);
 %saveas(gcf,'figures/fastwaterprice_over_LMP.png')
 savefig("figures/fastwaterprice_over_LMP.fig")
 
+
 %% FIG 3: Revenue over Feeder Capacity 
 % Concatenate 2022 and 2023 together
 rev5 = [rev(:, 1); rev(:, 2)];
@@ -109,16 +117,43 @@ xticks(0:3:24);
 legend('FontSize', legendFontSize, 'Location', 'northeast','FontName', 'Times New Roman');
 set(gca, 'FontSize', axisFontSize)
 grid on;
-%saveas(gcf,'figures/fastrevenue_over_FC.png')
+saveas(gcf,'figures/fastrevenue_over_FC.png')
 savefig("figures/fastrevenue_over_FC.fig")
 
 
 
+% Step 1: Sort the data
+sorted_power = sort(combo);
+sorted_hydro = sort(h);
+
+% Step 2: Compute cumulative power
+cumulative_power = normalize(cumsum(sorted_power), 'range', [0, 1]);
+cumlative_hydro = normalize(cumsum(sorted_hydro), 'range', [0, 1]);
+
+% Step 3: Normalize x-axis (percentage of time)
+time_percentage = linspace(0, 100, length(sorted_power));
+
+% Step 4: Plot the CDF
+figure;
+hold on 
+plot(time_percentage, cumulative_power, 'LineWidth', 2, 'DisplayName', 'Total Power');
+plot(time_percentage, cumlative_hydro, 'LineWidth', 2, 'DisplayName', 'Hydropower');
+xlabel('Percentage of Time (%)');
+ylabel('Cumulative Generation (normalized)');
+title('CDF of Power Generation');
+legend('FontSize', legendFontSize, 'Location', 'northwest','FontName', 'Times New Roman');
 
 
-
-
-
+% Step 5: empirical CDF
+figure;
+hold on
+ecdf(combo);
+hold on
+ecdf(h);
+legend('Combo', 'Hydropower', 'Location', 'best');
+xlabel('Power Generation (MW)');
+ylabel('Empirical CDF');
+title('Empirical CDF of Time Series Data');
 
 
 

@@ -33,7 +33,7 @@ global b = 0.1321;     # hydraulic head parameter 2
 y = "22"
 m = 1
 T = 24 
-N = 31
+N = 7
 
 # Load in 2022 - 2023 data
 daily, alpha, RTP = fullsim_dataload();
@@ -82,7 +82,9 @@ while abs(R - L) > error
             V_prev = V[t-1]
         end
 
-        phi = a*((V_prev)^b)
+        # phi = a*((V_prev)^b)
+        # phi = a*((V0)^b)
+        phi = 341.776
         theta_hat = (1/3.6e9)*price[t]*eta*g*rho_w*phi # ~0.039
 
         # water release
@@ -95,7 +97,8 @@ while abs(R - L) > error
         u[t] = max(u_prev - RR_dn, min_ut, min(max_ut, u_prev + RR_up, u_hat))
         # mass balance and hydro generation
         V[t] = V_prev + q[t] - u[t]
-        h[t] = min(P-s[t], eta*g*rho_w*u[t]*a*((V[t])^b)/3.6e9)
+        h[t] = min(P-s[t], eta*g*rho_w*u[t]*phi/3.6e9)
+        #h[t] = min(P-s[t], eta*g*rho_w*u[t]*a*((V[t])^b)/3.6e9)
     end
 
     U_sim = sum(u)
@@ -110,11 +113,11 @@ while abs(R - L) > error
 
     # iterate 
     i = i + 1
-end
+# end
 
 
 ## SIMULATION RESULTS FOR TUNED THETA
-println("Simulation Results: ")
+# println("Simulation Results: ")
 # Total Revenue 
 revenue = sum(price.*(s + h))
 println(revenue)
@@ -126,10 +129,10 @@ println(theta)
 println(U_sim)
 
 
-# end
+end
 
 # Computation Time
-#println("Median time in ms: $(median(result.times) / 1_000_000) ms")
+# println("Median time in ms: $(median(result.times) / 1_000_000) ms")
 
 # Download PS, PH, UT
 #combined_data = hcat(ps_t, ph_t, u_t)

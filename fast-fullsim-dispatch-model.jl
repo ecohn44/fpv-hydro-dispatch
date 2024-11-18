@@ -38,7 +38,11 @@ DV_plot = false;
 # -----------------  DATA LOAD  ----------------- #
 println("--- SIMULATION BEGIN ---")
 
-feeder = [500, 1000, 1300, 2000, 3000, 4000]
+# Storage arrays for solar + hydro 
+ST = Float64[]
+HT = Float64[]
+
+feeder = [1300] # [500, 1000, 1300, 2000, 3000, 4000]
 years = ["22", "23"]
 months = range(1, 12)
 num_m = length(months)
@@ -151,6 +155,9 @@ for P in feeder
                 i = i + 1
             end
 
+            append!(ST, s)
+            append!(HT, h)
+
             revenue[m,y_ind,pf_ind] = sum(price.*(s + h))
             release[m,y_ind,pf_ind] = sum(u)
             DVs[m,y_ind,pf_ind] = theta
@@ -163,6 +170,14 @@ for P in feeder
 end
 
 # ---------- SAVE CSV -------- #
+
+# OUTPUT GENERATION
+gen_headers = ["solar", "hydro"]
+gen_data = hcat(ST, HT)
+gen_df = DataFrame(gen_data, Symbol.(gen_headers))
+CSV.write("output/fastgen.csv", gen_df)
+
+#=
 ## OUTPUT DATA
 # save theta for 2022, 2023, PF
 flat_DVs = reshape(DVs, size(DVs, 1), size(DVs, 2) * size(DVs, 3))
@@ -179,7 +194,7 @@ CSV.write("output/fastrev.csv", rev_df)
 combined_data = hcat(avg_LMP, water_contract, total_inflow)
 input_df = DataFrame(combined_data, Symbol.(input_headers))
 CSV.write("output/fastinput.csv", input_df)
-
+=#
 
 # ---------- SUMMARY -------- #
 if print

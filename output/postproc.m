@@ -155,6 +155,12 @@ xlabel('Power Generation (MW)');
 ylabel('Empirical CDF');
 title('Empirical CDF of Time Series Data');
 
+%{ Interpretation (Dr Lall)
+% 50 percent of time hydro is 600MW and combo is 1300 MW
+% I am used to plotting this with Power on the y axis and time on the x axis
+% In this case it looks like combo is 1300 with cdf =0.3 , i.e 30 of time you produces less than 1300
+% you should be plotting solar and combo since the point is to show how the reliability of solr is improved
+%}
 
 
 

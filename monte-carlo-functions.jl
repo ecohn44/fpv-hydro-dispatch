@@ -28,6 +28,7 @@ function calibrate_sigma(target_mae, phi, n; tol=1e-3, max_iter=100)
     error("Failed to converge to target MAE")
 end
 
+## Use for solar (already normalized)
 function add_noise(sigma, phi, n, data)
    
     # Calibrate σ
@@ -42,11 +43,12 @@ function add_noise(sigma, phi, n, data)
     # Enforce positivity for solar input
     simulated_data[simulated_data .< 0] .= 0
 
-    println("Simulated MAPE: ", mean(abs.((simulated_data-data)./(abs.(data).+.5))))
+    # println("Simulated MAPE: ", mean(abs.((simulated_data-data)./(abs.(data).+.5))))
 
     return simulated_data
 end
 
+## Use for inflow and price 
 function add_noise_norm(sigma, phi, n, data)
 
     min_val, max_val = minimum(data), maximum(data)
@@ -55,7 +57,7 @@ function add_noise_norm(sigma, phi, n, data)
     simulated_data = norm_data + noise
     recovered_data = inverse_minmax(simulated_data, min_val, max_val)
         
-    println("Simulated MAPE: ", mean(abs.((recovered_data-data)./(abs.(data).+1))))
+    # println("Simulated MAPE: ", mean(abs.((recovered_data-data)./(abs.(data).+1))))
 
     return recovered_data
 end

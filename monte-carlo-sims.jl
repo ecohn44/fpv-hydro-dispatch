@@ -45,6 +45,8 @@ T = 24
 
 total_revenue = zeros(Float64, num_iters, length(mapes))
 total_release = zeros(Float64, num_iters, length(mapes))
+avg_revenue = zeros(Float64, num_iters, length(mapes))
+avg_release = zeros(Float64, num_iters, length(mapes))
 
 # Load in water price from fast-fullsim-dispatch-model 
 DVs_path = string("output/fastDVs.csv");
@@ -162,12 +164,17 @@ for mae in mapes
         # Sum total revenue 
         total_revenue[i,mae_index] = sum(revenue)
         total_release[i,mae_index] = sum(release)
+        avg_revenue[i,mae_index] = mean(revenue)
+        avg_release[i,mae_index] = mean(release)
     end
 end
 println("--- SIMULATION END ---")
 
-boxplot(1:length(mapes), eachcol(total_revenue/1e6), legend=false, xlabel="MAE Level (%)", ylabel="Total Revenue (\$ M)", title="Total Revenue vs MAE")
-boxplot(1:length(mapes), eachcol(total_release/1e6), legend=false, xlabel="MAE Level (%)", ylabel="Total Release (M m3)", title="Total Release vs MAE")
+boxplot(1:length(mapes), eachcol(total_revenue/1e6), legend=false, xlabel="MAPE Level (%)", ylabel="Total Revenue (\$ M)", title="Total Revenue vs MAPE")
+boxplot(1:length(mapes), eachcol(total_release/1e6), legend=false, xlabel="MAPE Level (%)", ylabel="Total Release (M m3)", title="Total Release vs MAPE")
+
+boxplot(1:length(mapes), eachcol(avg_revenue/1e6), legend=false, xlabel="MAPE Level (%)", ylabel="Avg Revenue (\$ M)", title="Avg Revenue vs MAPE")
+boxplot(1:length(mapes), eachcol(avg_release/1e6), legend=false, xlabel="MAPE Level (%)", ylabel="Avg Release (M m3)", title="Avg Release vs MAPE")
 
 CSV.write("output/monte-carlo-revenue-boxplot.csv", DataFrame(total_revenue, :auto))
 CSV.write("output/monte-carlo-release-boxplot.csv", DataFrame(total_release, :auto))

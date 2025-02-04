@@ -14,7 +14,7 @@ titleFontSize = 16;  % Font size for title
 % Load data
 DVs = 100*table2array(readtable('fastDVs.csv')); %convert to cents
 input = table2array(readtable('fastinput.csv'));
-rev = table2array(readtable('fastrev.csv'))/10e6; %convert to M$
+rev = table2array(readtable('fastrev.csv'))/1e6; %convert to M $
 gen = table2array(readtable('fastgen.csv'));
 s = gen(:,1);
 h = gen(:,2);
@@ -32,7 +32,7 @@ DV4 = [DVs(:, 11); DVs(:, 12)];
 LMP = [input(:, 1); input(:, 2)];
 outflow = [input(:, 3); input(:, 4)];
 inflow = [input(:, 5); input(:, 6)];
-netflow = (outflow - inflow)/10e6;
+netflow = (outflow - inflow)/1e6; % Convert to M m3
 
 
 % Create plot
@@ -186,3 +186,10 @@ set(gca, 'FontSize', axisFontSize)
 grid on;
 saveas(gcf,'figures/waterprice_over_netflow.png')
 %}
+
+%% Monte Carlo Simulations BoxPlot
+%MC_rev = table2array(readtable('monte-carlo-release-boxplot.csv'))/1e6; % Convert to (M $)
+
+%boxplot(MC_rev) % Create box plot
+%xlabel('MAPE (%)') % Label x-axis
+%ylabel('Total Revenue (M $)') % Label y-axis

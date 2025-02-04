@@ -5,7 +5,7 @@ include("dataload.jl")
 daily, alpha, RTP = fullsim_dataload();
 inflow = daily.inflow
 # Compute the average profile over columns
-solar_data = mean.(eachrow(alpha))
+solar_data = mean.(eachrow(alpha)) #alpha[:,1] 
 price = RTP.MW
 
 # Set data to transform 
@@ -17,7 +17,7 @@ min_val, max_val = minimum(data), maximum(data)
 norm_data = min_max_normalize(data) # For inflow and price
 recovered_data = []
 simulated_data = []
-mapes = [0 , 0.05, 0.1, 0.15, 0.2]
+mapes = [0.2] # [0 , 0.05, 0.1, 0.15, 0.2]
 
 # Simulation parameters
 n = length(data)  # Number of time steps
@@ -34,7 +34,7 @@ for target_mae in mapes
 
         if solar 
             simulated_data = data + noise
-            current_mae = mean(abs.((simulated_data-data)./(abs.(data).+.5)))
+            current_mae = mean(abs.((simulated_data-data)./(abs.(data).+tol)))
         else 
             simulated_data = norm_data + noise
             recovered_data = inverse_minmax(simulated_data, min_val, max_val)
@@ -48,7 +48,7 @@ for target_mae in mapes
     end
 
     if solar 
-        println("Simulated MAPE: ", mean(abs.((simulated_data-data)./(abs.(data).+.5))))
+        println("Simulated MAPE: ", mean(abs.((simulated_data-data)./(abs.(data).+tol))))
         simulated_data[simulated_data .< 0] .= 0
     else 
         println("Simulated MAPE: ", mean(abs.((recovered_data-data)./(abs.(data).+1))))

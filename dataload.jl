@@ -41,12 +41,12 @@ end
 
 function fullsim_dataload()
 
-    LMP_path = string("data/fullsim/price-data.csv");
-    inflow_path = string("data/fullsim/lake-powell-inflow-daily.csv");
-    solarrad_path = "data/fullsim/solar-rad-capacity.csv";
-    release_path = string("data/fullsim/lake-mead-release.csv");
-    mead_storage_path = string("data/fullsim/lake-mead-storage-daily.csv");
-    powell_storage_path = string("data/fullsim/lake-powell-storage-daily.csv");
+    LMP_path = string("/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/price-data.csv");
+    inflow_path = string("/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/lake-powell-inflow-daily.csv");
+    solarrad_path = "/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/solar-rad-capacity.csv";
+    release_path = string("/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/lake-mead-release.csv");
+    mead_storage_path = string("/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/lake-mead-storage-daily.csv");
+    powell_storage_path = string("/Users/elizacohn/Desktop/fpv-hydro-dispatch/data/fullsim/lake-powell-storage-daily.csv");
 
     # Read in Local Marginal Price for Lake Mead
     RTP = DataFrame(CSV.File(LMP_path)); # currently just 2022
